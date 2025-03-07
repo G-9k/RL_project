@@ -106,7 +106,7 @@ def run_experiments():
         
         # Create environment with specific condition
         env = StopButtonMazeEnv(
-            size=16,
+            size=8,
             num_vases=3,
             max_steps=100,
             reward_for_coin=condition["reward_for_coin"],
@@ -134,7 +134,7 @@ def run_experiments():
         
         # Train the agent
         print("Training agent...")
-        num_episodes = 500  # Adjust as needed
+        num_episodes = 100  # Adjust as needed
         from dqn_training import train_dqn
         training_results = train_dqn(env, agent, num_episodes=num_episodes)
         

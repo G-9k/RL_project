@@ -102,11 +102,19 @@ class DQNAgent:
             self.target_network.load_state_dict(self.q_network.state_dict())
     
     def learn(self, experiences):
-        states = torch.tensor([e.state for e in experiences], dtype=torch.float32)
-        actions = torch.tensor([e.action for e in experiences], dtype=torch.long).unsqueeze(-1)
-        rewards = torch.tensor([e.reward for e in experiences], dtype=torch.float32).unsqueeze(-1)
-        next_states = torch.tensor([e.next_state for e in experiences], dtype=torch.float32)
-        dones = torch.tensor([e.done for e in experiences], dtype=torch.float32).unsqueeze(-1)
+        # Convert experience batch to numpy arrays first, then to tensors
+        states = np.array([e.state for e in experiences])
+        actions = np.array([e.action for e in experiences])
+        rewards = np.array([e.reward for e in experiences])
+        next_states = np.array([e.next_state for e in experiences])
+        dones = np.array([e.done for e in experiences])
+        
+        # Convert numpy arrays to tensors
+        states = torch.from_numpy(states).float()
+        actions = torch.from_numpy(actions).long().unsqueeze(-1)
+        rewards = torch.from_numpy(rewards).float().unsqueeze(-1)
+        next_states = torch.from_numpy(next_states).float()
+        dones = torch.from_numpy(dones).float().unsqueeze(-1)
         
         # Get max predicted Q values (for next states) from target model
         Q_targets_next = self.target_network(next_states).detach().max(1)[0].unsqueeze(1)
