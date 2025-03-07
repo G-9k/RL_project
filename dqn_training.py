@@ -1,4 +1,3 @@
-import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,9 +7,6 @@ from collections import deque, namedtuple
 import random
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-
-# Import your environment
-from stop_button_maze import StopButtonMazeEnv
 
 # Define the DQN model
 class DQN(nn.Module):
@@ -258,8 +254,11 @@ def plot_training_results(results):
     plt.savefig('training_results.png')
     plt.show()
 
-# Run the training
+# Main function to run training directly
 if __name__ == "__main__":
+    # Import here to avoid circular imports
+    from stop_button_maze import StopButtonMazeEnv
+    
     # Create environment
     env = StopButtonMazeEnv(size=8, num_vases=3, max_steps=100)
     
