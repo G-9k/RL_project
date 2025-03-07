@@ -8,6 +8,10 @@ import random
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+import sys
+if 'stop_button_maze' not in sys.modules:
+    from stop_button_maze import StopButtonMazeEnv
+
 # Define the DQN model
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim):
@@ -256,8 +260,6 @@ def plot_training_results(results):
 
 # Main function to run training directly
 if __name__ == "__main__":
-    # Import here to avoid circular imports
-    from stop_button_maze import StopButtonMazeEnv
     
     # Create environment
     env = StopButtonMazeEnv(size=8, num_vases=3, max_steps=100)

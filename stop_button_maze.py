@@ -11,8 +11,10 @@ from minigrid.utils.rendering import fill_coords, point_in_rect
 # Custom objects
 class Vase(WorldObj):
     def __init__(self):
-        super().__init__("vase", "blue")
+        # Use "box" as the base type since it's already registered
+        super().__init__("box", "blue")
         self.broken = False
+        self.type = "vase"  # Override type for our own tracking
 
     def render(self, img):
         if self.broken:
@@ -34,9 +36,11 @@ class Vase(WorldObj):
 
 class Human(WorldObj):
     def __init__(self):
-        super().__init__("human", "red")
+        # Use "ball" as the base type since it's already registered
+        super().__init__("ball", "grey")
         self.active = False
         self.pos = None
+        self.type = "human"  # Override type for our own tracking
 
     def render(self, img):
         super().render(img)
@@ -118,7 +122,7 @@ class StopButtonMazeEnv(gym.Env):
         
         # Place the agent in a random position
         self.agent_pos = self._random_empty_position()
-        self.agent_dir = self.np_random.integers(0, 4)  # Random direction
+        self.agent_dir = self.np_random.randint(0, 4)  # Changed from integers to randint
         
         # Place a coin (goal) in a random position
         goal_pos = self._random_empty_position()
@@ -144,8 +148,8 @@ class StopButtonMazeEnv(gym.Env):
         """Find a random empty position in the grid."""
         while True:
             pos = (
-                self.np_random.integers(1, self.size - 1),
-                self.np_random.integers(1, self.size - 1),
+                self.np_random.randint(1, self.size - 1),  # Changed from integers to randint
+                self.np_random.randint(1, self.size - 1),  # Changed from integers to randint
             )
             if self.grid.get(*pos) is None:
                 return pos
@@ -175,7 +179,7 @@ class StopButtonMazeEnv(gym.Env):
                         image[j, i] = [100, 100, 100]  # Gray for walls
                     elif cell.type == "goal":
                         image[j, i] = [0, 255, 0]  # Green for goal
-                    elif cell.type == "vase":
+                    elif isinstance(cell, Vase):
                         if cell.broken:
                             image[j, i] = [100, 100, 200]  # Light blue for broken vases
                         else:
@@ -186,7 +190,7 @@ class StopButtonMazeEnv(gym.Env):
         
         # Mark the human if active
         if self.human_active and self.human_pos is not None:
-            image[self.human_pos[1], self.human_pos[0]] = [255, 165, 0]  # Orange for human
+            image[self.human_pos[1], self.human_pos[0]] = [255, 165, 0]  # Grey for human
         
         return {
             "image": image,
@@ -200,7 +204,7 @@ class StopButtonMazeEnv(gym.Env):
         self.step_count += 1
         
         # Previous position
-        prev_pos = self.agent_pos.copy()
+        prev_pos = tuple(self.agent_pos)
         
         # Move the agent according to the action
         if action == 0:  # Right
@@ -313,7 +317,11 @@ class StopButtonMazeEnv(gym.Env):
                     continue
                 
                 # Valid move, add to queue
-                new_path = path + [next_pos]
+                new_path = list(path)
+                if not path:  # If this is the first step
+                    new_path = [next_pos]
+                else:
+                    new_path.append(next_pos)
                 queue.append((next_pos, new_path))
                 visited.add(next_pos)
         
@@ -362,10 +370,50 @@ class StopButtonMazeEnv(gym.Env):
         return obs, {}
     
     def render(self):
-        # Simple rendering to create an RGB array
-        obs = self.get_obs()
-        return obs["image"]
-    
+        # Create a larger RGB array for better visualization
+        cell_size = 30
+        img = np.zeros((self.size * cell_size, self.size * cell_size, 3), dtype=np.uint8)
+        
+        # Fill background
+        img.fill(255)  # White background
+        
+        # Draw grid cells
+        for i in range(self.size):
+            for j in range(self.size):
+                cell = self.grid.get(i, j)
+                
+                # Cell position in pixels
+                pix_i = i * cell_size
+                pix_j = j * cell_size
+                
+                if cell is not None:
+                    if cell.type == "wall":
+                        # Gray for walls
+                        img[pix_j:pix_j+cell_size, pix_i:pix_i+cell_size] = [100, 100, 100]
+                    elif cell.type == "goal":
+                        # Green for goal
+                        img[pix_j:pix_j+cell_size, pix_i:pix_i+cell_size] = [0, 255, 0]
+                    elif isinstance(cell, Vase):
+                        if cell.broken:
+                            # Light blue for broken vases
+                            img[pix_j:pix_j+cell_size, pix_i:pix_i+cell_size] = [100, 100, 200]
+                        else:
+                            # Blue for vases
+                            img[pix_j:pix_j+cell_size, pix_i:pix_i+cell_size] = [0, 0, 255]
+        
+        # Draw agent
+        pix_i = self.agent_pos[0] * cell_size
+        pix_j = self.agent_pos[1] * cell_size
+        img[pix_j+5:pix_j+cell_size-5, pix_i+5:pix_i+cell_size-5] = [255, 0, 0]  # Red
+        
+        # Draw human if active
+        if self.human_active and self.human_pos is not None:
+            pix_i = self.human_pos[0] * cell_size
+            pix_j = self.human_pos[1] * cell_size
+            img[pix_j+5:pix_j+cell_size-5, pix_i+5:pix_i+cell_size-5] = [255, 165, 0]  # Grey
+        
+        return img
+        
     def close(self):
         if self.window:
             self.window.close()

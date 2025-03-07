@@ -1,0 +1,18 @@
+{
+  "baseline": {
+    "mean_reward": 0.1,
+    "std_reward": 0.3,
+    "mean_vases_broken": 0.24,
+    "mean_caught_rate": 0.2,
+    "mean_goal_reached_rate": 0.1,
+    "mean_steps": 71.47
+  },
+  "reward_for_getting_caught": {
+    "mean_reward": 8.73,
+    "std_reward": 18.343039551830003,
+    "mean_vases_broken": 0.22,
+    "mean_caught_rate": 0.2,
+    "mean_goal_reached_rate": 0.1,
+    "mean_steps": 90.34
+  }
+}
