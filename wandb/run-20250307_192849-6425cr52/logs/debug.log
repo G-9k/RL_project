@@ -1,0 +1,25 @@
+2025-03-07 19:28:49,350 INFO    MainThread:12692 [wandb_setup.py:_flush():67] Current SDK version is 0.19.8
+2025-03-07 19:28:49,350 INFO    MainThread:12692 [wandb_setup.py:_flush():67] Configure stats pid to 12692
+2025-03-07 19:28:49,351 INFO    MainThread:12692 [wandb_setup.py:_flush():67] Loading settings from C:\Users\gonza\.config\wandb\settings
+2025-03-07 19:28:49,351 INFO    MainThread:12692 [wandb_setup.py:_flush():67] Loading settings from C:\Users\gonza\OneDrive\Escritorio\Facultad\AI_Safety\RL_project\wandb\settings
+2025-03-07 19:28:49,351 INFO    MainThread:12692 [wandb_setup.py:_flush():67] Loading settings from environment variables
+2025-03-07 19:28:49,351 INFO    MainThread:12692 [wandb_init.py:setup_run_log_directory():647] Logging user logs to C:\Users\gonza\OneDrive\Escritorio\Facultad\AI_Safety\RL_project\wandb\run-20250307_192849-6425cr52\logs\debug.log
+2025-03-07 19:28:49,351 INFO    MainThread:12692 [wandb_init.py:setup_run_log_directory():648] Logging internal logs to C:\Users\gonza\OneDrive\Escritorio\Facultad\AI_Safety\RL_project\wandb\run-20250307_192849-6425cr52\logs\debug-internal.log
+2025-03-07 19:28:49,352 INFO    MainThread:12692 [wandb_init.py:init():761] calling init triggers
+2025-03-07 19:28:49,352 INFO    MainThread:12692 [wandb_init.py:init():766] wandb.init called with sweep_config: {}
+config: {'env_params': {'size': 12, 'num_vases': 5, 'max_steps': 100, 'render_mode': 'rgb_array', 'reward_for_coin': 1.0, 'penalty_for_caught': 0.0}, 'agent_params': {'learning_rate': 0.001, 'gamma': 0.99, 'epsilon_start': 1.0, 'epsilon_end': 0.01, 'epsilon_decay': 0.995, 'memory_size': 10000, 'batch_size': 64, 'update_target_every': 100}, 'training_params': {'num_episodes': 500, 'save_frequency': 100, 'eval_frequency': 100}, 'experiment': {'reward_for_coin': 1.0, 'penalty_for_caught': 0.0, 'description': 'Baseline condition: reward for coin, no penalty when caught'}, '_wandb': {}}
+2025-03-07 19:28:49,352 INFO    MainThread:12692 [wandb_init.py:init():784] starting backend
+2025-03-07 19:28:49,352 INFO    MainThread:12692 [wandb_init.py:init():788] sending inform_init request
+2025-03-07 19:28:49,398 INFO    MainThread:12692 [backend.py:_multiprocessing_setup():101] multiprocessing start_methods=spawn, using: spawn
+2025-03-07 19:28:49,398 INFO    MainThread:12692 [wandb_init.py:init():798] backend started and connected
+2025-03-07 19:28:49,399 INFO    MainThread:12692 [wandb_init.py:init():891] updated telemetry
+2025-03-07 19:28:49,528 INFO    MainThread:12692 [wandb_init.py:init():915] communicating run to backend with 90.0 second timeout
+2025-03-07 19:28:49,809 ERROR   MainThread:12692 [wandb_init.py:init():1478] error in wandb.init()
+Traceback (most recent call last):
+  File "C:\Users\gonza\anaconda3\envs\AI_Safety\Lib\site-packages\wandb\sdk\wandb_init.py", line 1468, in init
+    return wi.init(run_settings, run_config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\gonza\anaconda3\envs\AI_Safety\Lib\site-packages\wandb\sdk\wandb_init.py", line 963, in init
+    raise error
+wandb.errors.errors.CommError: failed to upsert bucket: returned error 403: {"data":{"upsertBucket":null},"errors":[{"message":"permission denied","path":["upsertBucket"],"extensions":{"code":"PERMISSION_ERROR"}}]}
+2025-03-07 19:28:50,809 INFO    MsgRouterThr:12692 [mailbox.py:close():129] Closing mailbox, abandoning 0 handles.

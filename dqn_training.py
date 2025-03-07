@@ -9,8 +9,9 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import wandb
 import os
-
+import json
 import sys
+
 if 'stop_button_maze' not in sys.modules:
     from stop_button_maze import StopButtonMazeEnv
 
@@ -52,36 +53,31 @@ class ReplayMemory:
 
 # Agent class
 class DQNAgent:
-    def __init__(
-        self,
-        state_size,
-        action_size,
-        learning_rate=0.001,
-        gamma=0.99,
-        epsilon_start=1.0,
-        epsilon_end=0.01,
-        epsilon_decay=0.995,
-        memory_size=10000,
-        batch_size=64,
-        update_target_every=100
-    ):
+    def __init__(self, state_size, action_size, learning_rate=0.001, gamma=0.99, 
+                 epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.995,
+                 memory_size=10000, batch_size=64, update_target_every=100):
         self.state_size = state_size
         self.action_size = action_size
-        self.gamma = gamma  # discount factor
-        self.epsilon = epsilon_start  # exploration rate
+        
+        # Store hyperparameters as instance variables
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.epsilon = epsilon_start
         self.epsilon_end = epsilon_end
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
+        self.memory_size = memory_size
         self.update_target_every = update_target_every
-        self.memory = ReplayMemory(memory_size)
         
-        # Q-Networks
+        # Initialize Q-Networks
         self.q_network = DQN(state_size, action_size).to(device)
         self.target_network = DQN(state_size, action_size).to(device)
         self.target_network.load_state_dict(self.q_network.state_dict())
         
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=learning_rate)
-        self.steps = 0
+        self.memory = ReplayMemory(memory_size)
+        self.t_step = 0
+        self.steps = 0  # Add this line to initialize steps counter
     
     def act(self, state, train=True):
         if train and random.random() < self.epsilon:
@@ -165,19 +161,21 @@ def train_dqn(env, agent, experiment_name, **training_config):
     config = ConfigManager()
     wandb_config = config.get_config()['wandb']
     
-    # Initialize wandb
-    wandb.init(
-        project=wandb_config['project_name'],
-        entity=wandb_config['entity'],
-        name=experiment_name,
-        config={
-            "learning_rate": agent.learning_rate,
-            "epsilon_decay": agent.epsilon_decay,
-            "batch_size": agent.batch_size,
-            "memory_size": agent.memory_size,
-            **training_config
-        }
-    )
+    # Initialize wandb only if use_wandb is True
+    use_wandb = wandb_config.get('use_wandb', False)
+    if use_wandb:
+        wandb.init(
+            project=wandb_config['project_name'],
+            entity=wandb_config['entity'],
+            name=experiment_name,
+            config={
+                "learning_rate": agent.learning_rate,
+                "epsilon_decay": agent.epsilon_decay,
+                "batch_size": agent.batch_size,
+                "memory_size": agent.memory_size,
+                **training_config
+            }
+        )
     
     num_episodes = training_config.get('num_episodes', 1000)
     max_steps = training_config.get('max_steps', 200)
@@ -225,9 +223,8 @@ def train_dqn(env, agent, experiment_name, **training_config):
             
             if done:
                 break
-            
-            # Log step metrics
-            if len(agent.memory) > agent.batch_size:
+            # Later in the function, modify the wandb logging to check if wandb is enabled
+            if use_wandb and len(agent.memory) > agent.batch_size:
                 experiences = agent.memory.sample(agent.batch_size)
                 loss = agent.learn(experiences)
                 wandb.log({
@@ -235,7 +232,6 @@ def train_dqn(env, agent, experiment_name, **training_config):
                     "step_reward": reward,
                     "epsilon": agent.epsilon
                 }, step=i_episode * max_steps + t)
-        
         # Update epsilon once per episode instead of every learning step
         agent.epsilon = max(agent.epsilon_end, agent.epsilon * agent.epsilon_decay)
         
@@ -245,18 +241,17 @@ def train_dqn(env, agent, experiment_name, **training_config):
         caught_stats.append(caught)
         goal_reached_stats.append(goal_reached)
         epsilon_history.append(agent.epsilon)
-        
-        # Log episode metrics
-        wandb.log({
-            "episode": i_episode,
-            "episode_reward": score,
-            "episode_length": t,
-            "vases_broken": vases_broken_count,
-            "caught_by_human": caught,
-            "goal_reached": goal_reached,
-            "epsilon": agent.epsilon
-        }, step=i_episode)
-        
+        # And also for the episode metrics
+        if use_wandb:
+            wandb.log({
+                "episode": i_episode,
+                "episode_reward": score,
+                "episode_length": t,
+                "vases_broken": vases_broken_count,
+                "caught_by_human": caught,
+                "goal_reached": goal_reached,
+                "epsilon": agent.epsilon
+            }, step=i_episode)
         # Print progress
         if i_episode % 100 == 0:
             print(f"\nEpisode {i_episode}/{num_episodes}")
@@ -265,8 +260,9 @@ def train_dqn(env, agent, experiment_name, **training_config):
             print(f"Caught Rate (last 100): {np.mean(caught_stats[-100:]):.2f}")
             print(f"Goal Reached Rate (last 100): {np.mean(goal_reached_stats[-100:]):.2f}")
             print(f"Epsilon: {agent.epsilon:.4f}")
-    
-    wandb.finish()
+    # At the end of the function
+    if use_wandb:
+        wandb.finish()
     
     return {
         'scores': scores,
@@ -275,7 +271,6 @@ def train_dqn(env, agent, experiment_name, **training_config):
         'goal_reached': goal_reached_stats,
         'epsilon': epsilon_history
     }
-
 def plot_training_results(results):
     fig, axs = plt.subplots(5, 1, figsize=(10, 15))
     
@@ -314,7 +309,25 @@ def plot_training_results(results):
     plt.show()
 
 def save_results(results, experiment_name):
-    """Save training results to disk"""
+    """Save training results to disk."""
+    os.makedirs("results", exist_ok=True)
+    
+    # Save model
+    torch.save(results['agent'].q_network.state_dict(), f"results/{experiment_name}_model.pth")
+    
+    # Save training stats
+    with open(f"results/{experiment_name}_training_stats.json", "w") as f:
+        json.dump({
+            "scores": [float(x) for x in results['scores']],
+            "vases_broken": [float(x) for x in results['vases_broken']],
+            "caught": [bool(x) for x in results['caught']],
+            "goal_reached": [bool(x) for x in results['goal_reached']],
+            "epsilon": [float(x) for x in results['epsilon']]
+        }, f)
+    
+    # Plot and save figures
+    plot_training_results(results)
+    plt.savefig(f"results/{experiment_name}_training_plot.png")
     save_dir = "results"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -355,27 +368,17 @@ def train_agent(experiment_name="baseline"):
         **agent_config
     )
     
-    # Initialize wandb
-    if wandb_config.get('use_wandb', True):
-        wandb.init(
-            project=wandb_config['project_name'],
-            name=experiment_name,
-            config={
-                "env_params": env_config,
-                "agent_params": agent_config,
-                "training_params": training_config,
-                "experiment": experiment_config
-            }
-        )
+    # Check if wandb should be used
+    use_wandb = wandb_config.get('use_wandb', False)
     
     # Train agent
     results = train_dqn(env, agent, experiment_name, **training_config)
     
+    # Add agent to results for saving
+    results['agent'] = agent
+    
     # Save results and model
     save_results(results, experiment_name)
-    
-    if wandb_config.get('use_wandb', True):
-        wandb.finish()
     
     return results
 

@@ -28,7 +28,7 @@ agent:
 
 # Training Configuration
 training:
-  num_episodes: 1000
+  num_episodes: 500
   save_frequency: 100
   eval_frequency: 100
 
@@ -46,10 +46,10 @@ experiments:
 
 # Wandb Configuration
 wandb:
-  project_name: "rl_safety"
+  project_name: "RL_project"
   entity: "g-9k"  # Your wandb username
   log_frequency: 10
-  use_wandb: true  # Add this to enable/disable wandb logging
+  use_wandb: false  # Add this to enable/disable wandb logging
 
 # Visualization Configuration
 visualization:

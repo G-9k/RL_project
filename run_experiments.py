@@ -105,7 +105,7 @@ def run_experiments():
         env_config = {
             **config.get_env_config(),
             "reward_for_coin": condition["reward_for_coin"],
-            "penalty_for_caught": condition["penalty_for_caught"]
+            "penalty_for_caught": condition.get("penalty_for_caught", 0.0)  # Default to 0 if not specified
         }
         
         env = StopButtonMazeEnv(**env_config)
@@ -123,10 +123,15 @@ def run_experiments():
             **agent_config
         )
         
-        # Train with config
+        # Train with config and experiment name
         training_config = config.get_training_config()
         print("Training agent...")
-        training_results = train_dqn(env, agent, **training_config)
+        training_results = train_dqn(
+            env=env, 
+            agent=agent, 
+            experiment_name=condition['name'],  # Add experiment name here
+            **training_config
+        )
         
         # Save training results
         os.makedirs("results", exist_ok=True)
