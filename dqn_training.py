@@ -7,10 +7,17 @@ from collections import deque, namedtuple
 import random
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import wandb
+import os
 
 import sys
 if 'stop_button_maze' not in sys.modules:
     from stop_button_maze import StopButtonMazeEnv
+
+from config_manager import ConfigManager
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 # Define the DQN model
 class DQN(nn.Module):
@@ -69,8 +76,8 @@ class DQNAgent:
         self.memory = ReplayMemory(memory_size)
         
         # Q-Networks
-        self.q_network = DQN(state_size, action_size)
-        self.target_network = DQN(state_size, action_size)
+        self.q_network = DQN(state_size, action_size).to(device)
+        self.target_network = DQN(state_size, action_size).to(device)
         self.target_network.load_state_dict(self.q_network.state_dict())
         
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=learning_rate)
@@ -80,7 +87,7 @@ class DQNAgent:
         if train and random.random() < self.epsilon:
             return random.randrange(self.action_size)
         
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
         self.q_network.eval()
         with torch.no_grad():
             action_values = self.q_network(state)
@@ -103,18 +110,11 @@ class DQNAgent:
     
     def learn(self, experiences):
         # Convert experience batch to numpy arrays first, then to tensors
-        states = np.array([e.state for e in experiences])
-        actions = np.array([e.action for e in experiences])
-        rewards = np.array([e.reward for e in experiences])
-        next_states = np.array([e.next_state for e in experiences])
-        dones = np.array([e.done for e in experiences])
-        
-        # Convert numpy arrays to tensors
-        states = torch.from_numpy(states).float()
-        actions = torch.from_numpy(actions).long().unsqueeze(-1)
-        rewards = torch.from_numpy(rewards).float().unsqueeze(-1)
-        next_states = torch.from_numpy(next_states).float()
-        dones = torch.from_numpy(dones).float().unsqueeze(-1)
+        states = torch.from_numpy(np.array([e.state for e in experiences])).float().to(device)
+        actions = torch.from_numpy(np.array([e.action for e in experiences])).long().unsqueeze(-1).to(device)
+        rewards = torch.from_numpy(np.array([e.reward for e in experiences])).float().unsqueeze(-1).to(device)
+        next_states = torch.from_numpy(np.array([e.next_state for e in experiences])).float().to(device)
+        dones = torch.from_numpy(np.array([e.done for e in experiences])).float().unsqueeze(-1).to(device)
         
         # Get max predicted Q values (for next states) from target model
         Q_targets_next = self.target_network(next_states).detach().max(1)[0].unsqueeze(1)
@@ -131,8 +131,7 @@ class DQNAgent:
         loss.backward()
         self.optimizer.step()
         
-        # Update epsilon
-        self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
+        return loss.item()
 
 # Preprocess observations for the DQN
 def preprocess_observation(obs):
@@ -161,8 +160,30 @@ def preprocess_observation(obs):
     
     return features
 
-# Training function
-def train_dqn(env, agent, num_episodes=1000, max_steps=200):
+def train_dqn(env, agent, experiment_name, **training_config):
+    # Get wandb config
+    config = ConfigManager()
+    wandb_config = config.get_config()['wandb']
+    
+    # Initialize wandb
+    wandb.init(
+        project=wandb_config['project_name'],
+        entity=wandb_config['entity'],
+        name=experiment_name,
+        config={
+            "learning_rate": agent.learning_rate,
+            "epsilon_decay": agent.epsilon_decay,
+            "batch_size": agent.batch_size,
+            "memory_size": agent.memory_size,
+            **training_config
+        }
+    )
+    
+    num_episodes = training_config.get('num_episodes', 1000)
+    max_steps = training_config.get('max_steps', 200)
+    save_frequency = training_config.get('save_frequency', 100)
+    eval_frequency = training_config.get('eval_frequency', 100)
+    
     scores = []
     vases_broken_stats = []
     caught_stats = []
@@ -204,6 +225,19 @@ def train_dqn(env, agent, num_episodes=1000, max_steps=200):
             
             if done:
                 break
+            
+            # Log step metrics
+            if len(agent.memory) > agent.batch_size:
+                experiences = agent.memory.sample(agent.batch_size)
+                loss = agent.learn(experiences)
+                wandb.log({
+                    "step_loss": loss,
+                    "step_reward": reward,
+                    "epsilon": agent.epsilon
+                }, step=i_episode * max_steps + t)
+        
+        # Update epsilon once per episode instead of every learning step
+        agent.epsilon = max(agent.epsilon_end, agent.epsilon * agent.epsilon_decay)
         
         # Save episode statistics
         scores.append(score)
@@ -211,6 +245,17 @@ def train_dqn(env, agent, num_episodes=1000, max_steps=200):
         caught_stats.append(caught)
         goal_reached_stats.append(goal_reached)
         epsilon_history.append(agent.epsilon)
+        
+        # Log episode metrics
+        wandb.log({
+            "episode": i_episode,
+            "episode_reward": score,
+            "episode_length": t,
+            "vases_broken": vases_broken_count,
+            "caught_by_human": caught,
+            "goal_reached": goal_reached,
+            "epsilon": agent.epsilon
+        }, step=i_episode)
         
         # Print progress
         if i_episode % 100 == 0:
@@ -220,6 +265,8 @@ def train_dqn(env, agent, num_episodes=1000, max_steps=200):
             print(f"Caught Rate (last 100): {np.mean(caught_stats[-100:]):.2f}")
             print(f"Goal Reached Rate (last 100): {np.mean(goal_reached_stats[-100:]):.2f}")
             print(f"Epsilon: {agent.epsilon:.4f}")
+    
+    wandb.finish()
     
     return {
         'scores': scores,
@@ -266,44 +313,76 @@ def plot_training_results(results):
     plt.savefig('training_results.png')
     plt.show()
 
-# Main function to run training directly
-if __name__ == "__main__":
+def save_results(results, experiment_name):
+    """Save training results to disk"""
+    save_dir = "results"
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
     
-    # Create environment
-    env = StopButtonMazeEnv(size=8, num_vases=3, max_steps=100)
+    # Save results as numpy arrays
+    for key, value in results.items():
+        np.save(f"{save_dir}/{experiment_name}_{key}.npy", np.array(value))
+
+def train_agent(experiment_name="baseline"):
+    """Unified training function using config"""
+    config = ConfigManager()
     
-    # Get state and action dimensions
+    # Get configs
+    env_config = config.get_env_config()
+    agent_config = config.get_agent_config()
+    training_config = config.get_training_config()
+    experiment_config = config.get_experiment_config(experiment_name)
+    wandb_config = config.get_wandb_config()
+    
+    # Update env config with experiment-specific parameters
+    env_config.update({
+        "reward_for_coin": experiment_config["reward_for_coin"],
+        "penalty_for_caught": experiment_config["penalty_for_caught"]
+    })
+    
+    # Initialize environment
+    env = StopButtonMazeEnv(**env_config)
+    
+    # Initialize agent
     obs, _ = env.reset()
     state = preprocess_observation(obs)
     state_size = len(state)
     action_size = env.action_space.n
     
-    print(f"State size: {state_size}")
-    print(f"Action size: {action_size}")
-    
-    # Create agent
     agent = DQNAgent(
         state_size=state_size,
         action_size=action_size,
-        learning_rate=0.001,
-        gamma=0.99,
-        epsilon_start=1.0,
-        epsilon_end=0.01,
-        epsilon_decay=0.995,
-        memory_size=10000,
-        batch_size=64,
-        update_target_every=100
+        **agent_config
     )
     
-    # Train the agent
-    num_episodes = 1000  # Adjust as needed
-    results = train_dqn(env, agent, num_episodes=num_episodes)
+    # Initialize wandb
+    if wandb_config.get('use_wandb', True):
+        wandb.init(
+            project=wandb_config['project_name'],
+            name=experiment_name,
+            config={
+                "env_params": env_config,
+                "agent_params": agent_config,
+                "training_params": training_config,
+                "experiment": experiment_config
+            }
+        )
     
-    # Plot results
-    plot_training_results(results)
+    # Train agent
+    results = train_dqn(env, agent, experiment_name, **training_config)
     
-    # Save the trained model
-    torch.save(agent.q_network.state_dict(), 'dqn_stop_button.pth')
+    # Save results and model
+    save_results(results, experiment_name)
     
-    # Close the environment
-    env.close()
+    if wandb_config.get('use_wandb', True):
+        wandb.finish()
+    
+    return results
+
+if __name__ == "__main__":
+    config = ConfigManager()
+    
+    # Train all conditions defined in config
+    for experiment_name in config.get_config()['experiments'].keys():
+        print(f"\nTraining {experiment_name}...")
+        train_agent(experiment_name=experiment_name)

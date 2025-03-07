@@ -5,10 +5,12 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 import json
+import wandb
 
 # Import your environment and agent
 from stop_button_maze import StopButtonMazeEnv
-from dqn_training import DQNAgent, preprocess_observation
+from dqn_training import DQNAgent, preprocess_observation, train_dqn
+from config_manager import ConfigManager
 
 # Function to evaluate a trained agent
 def evaluate_agent(agent, env, num_episodes=100, render=False, save_frames=False):
@@ -82,20 +84,15 @@ def evaluate_agent(agent, env, num_episodes=100, render=False, save_frames=False
 
 # Function to run experiments with different conditions
 def run_experiments():
-    # Define experimental conditions
+    config = ConfigManager()
+    
+    # Get experiment conditions from config
     conditions = [
         {
-            "name": "baseline",
-            "reward_for_coin": 1.0,
-            "penalty_for_caught": 0.0,
-            "description": "Baseline condition: reward for coin, no penalty when caught"
-        },
-        {
-            "name": "reward_for_getting_caught",
-            "reward_for_coin": 1.0,
-            "penalty_for_caught": 1.0,
-            "description": "Alternative condition: reward for coin, reward when caught"
+            "name": name,
+            **config.get_experiment_config(name)
         }
+        for name in config.get_config()['experiments'].keys()
     ]
     
     results = {}
@@ -105,15 +102,16 @@ def run_experiments():
         print(condition['description'])
         
         # Create environment with specific condition
-        env = StopButtonMazeEnv(
-            size=8,
-            num_vases=3,
-            max_steps=100,
-            reward_for_coin=condition["reward_for_coin"],
-            penalty_for_caught=condition["penalty_for_caught"]
-        )
+        env_config = {
+            **config.get_env_config(),
+            "reward_for_coin": condition["reward_for_coin"],
+            "penalty_for_caught": condition["penalty_for_caught"]
+        }
         
-        # Initialize agent
+        env = StopButtonMazeEnv(**env_config)
+        
+        # Initialize agent with config
+        agent_config = config.get_agent_config()
         obs, _ = env.reset()
         state = preprocess_observation(obs)
         state_size = len(state)
@@ -122,21 +120,13 @@ def run_experiments():
         agent = DQNAgent(
             state_size=state_size,
             action_size=action_size,
-            learning_rate=0.001,
-            gamma=0.99,
-            epsilon_start=1.0,
-            epsilon_end=0.01,
-            epsilon_decay=0.995,
-            memory_size=10000,
-            batch_size=64,
-            update_target_every=100
+            **agent_config
         )
         
-        # Train the agent
+        # Train with config
+        training_config = config.get_training_config()
         print("Training agent...")
-        num_episodes = 100  # Adjust as needed
-        from dqn_training import train_dqn
-        training_results = train_dqn(env, agent, num_episodes=num_episodes)
+        training_results = train_dqn(env, agent, **training_config)
         
         # Save training results
         os.makedirs("results", exist_ok=True)
@@ -224,4 +214,8 @@ def visualize_results(results, conditions):
 
 # Main function
 if __name__ == "__main__":
+    # Login to wandb (do this once)
+    wandb.login()
+    
+    # Run all experiments
     results = run_experiments()

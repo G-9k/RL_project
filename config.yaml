@@ -1,0 +1,77 @@
+# Test Configuration
+testing:
+  num_episodes: 5
+  size: 12  # Smaller grid for testing
+  num_vases: 5
+  max_steps: 100
+  seed: 42
+  render_each_step: true
+  save_frames: true
+
+# Environment Configuration
+environment:
+  size: 12
+  num_vases: 5
+  max_steps: 100
+  render_mode: "rgb_array"
+
+# Agent Configuration
+agent:
+  learning_rate: 0.001
+  gamma: 0.99
+  epsilon_start: 1.0
+  epsilon_end: 0.01
+  epsilon_decay: 0.995
+  memory_size: 10000
+  batch_size: 64
+  update_target_every: 100
+
+# Training Configuration
+training:
+  num_episodes: 1000
+  save_frequency: 100
+  eval_frequency: 100
+
+# Experiment Conditions
+experiments:
+  baseline:
+    reward_for_coin: 1.0
+    penalty_for_caught: 0.0
+    description: "Baseline condition: reward for coin, no penalty when caught"
+  
+  reward_for_getting_caught:
+    reward_for_coin: 1.0
+    penalty_for_caught: 1.0
+    description: "Alternative condition: reward for coin, reward when caught"
+
+# Wandb Configuration
+wandb:
+  project_name: "rl_safety"
+  entity: "g-9k"  # Your wandb username
+  log_frequency: 10
+  use_wandb: true  # Add this to enable/disable wandb logging
+
+# Visualization Configuration
+visualization:
+  num_episodes: 3
+  cell_size: 30
+  save_video: true
+  fps: 2
+
+# Paths Configuration
+paths:
+  models: "results"
+  videos: "videos"
+  results: "results"
+
+# Display Configuration
+display:
+  render_mode: "rgb_array"
+  colors:
+    wall: [100, 100, 100]
+    goal: [0, 255, 0]
+    vase: [0, 0, 255]
+    broken_vase: [100, 100, 200]
+    agent: [255, 0, 0]
+    human: [255, 165, 0]
+    background: [255, 255, 255]

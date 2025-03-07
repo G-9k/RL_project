@@ -6,33 +6,31 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import os
 from IPython.display import HTML
+import cv2
 
 # Import your environment and agent
 from stop_button_maze import StopButtonMazeEnv
 from dqn_training import DQNAgent, preprocess_observation
+from config_manager import ConfigManager
 
-def load_and_visualize_agent(model_path, env_params=None, num_episodes=3, save_video=True):
+# Add at the beginning:
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def load_and_visualize_agent(model_path, num_episodes=3, save_video=True):
     """
     Load a trained agent and visualize its behavior.
     
     Args:
         model_path: Path to the saved model file (.pth)
-        env_params: Dictionary of environment parameters
         num_episodes: Number of episodes to run
         save_video: Whether to save a video file
     """
-    # Default environment parameters
-    if env_params is None:
-        env_params = {
-            "size": 8,
-            "num_vases": 3,
-            "max_steps": 100,
-            "reward_for_coin": 1.0,
-            "penalty_for_caught": 0.0
-        }
+    config = ConfigManager()
+    env_config = config.get_env_config()
+    agent_config = config.get_agent_config()
     
-    # Create environment
-    env = StopButtonMazeEnv(**env_params)
+    # Create environment with config
+    env = StopButtonMazeEnv(**env_config)
     
     # Get state and action dimensions
     obs, _ = env.reset()
@@ -40,31 +38,34 @@ def load_and_visualize_agent(model_path, env_params=None, num_episodes=3, save_v
     state_size = len(state)
     action_size = env.action_space.n
     
-    # Create agent
+    # Create agent with config
     agent = DQNAgent(
         state_size=state_size,
-        action_size=action_size
+        action_size=action_size,
+        **agent_config
     )
     
     # Load the trained model
-    agent.q_network.load_state_dict(torch.load(model_path))
+    agent.q_network.load_state_dict(torch.load(model_path, map_location=device))
+    agent.q_network.to(device)
+    agent.q_network.eval()
     
     # Run episodes and collect frames
-    all_frames = []
+    frames = []
     
     for episode in range(num_episodes):
         print(f"Episode {episode+1}/{num_episodes}")
         obs, _ = env.reset(seed=episode)  # Different seed for each episode
         state = preprocess_observation(obs)
         
-        episode_frames = []
         episode_reward = 0
         done = False
         step = 0
         
-        while not done and step < env_params["max_steps"]:
+        while not done and step < env_config["max_steps"]:
             # Select action (no exploration)
-            action = agent.act(state, train=False)
+            with torch.no_grad():
+                action = agent.act(state, train=False)
             
             # Take action
             obs, reward, terminated, truncated, info = env.step(action)
@@ -73,7 +74,10 @@ def load_and_visualize_agent(model_path, env_params=None, num_episodes=3, save_v
             
             # Render frame
             frame = env.render()
-            episode_frames.append(frame)
+            if frame is not None:
+                # Convert frame to BGR for OpenCV
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                frames.append(frame)
             
             # Update state and metrics
             state = next_state
@@ -87,60 +91,40 @@ def load_and_visualize_agent(model_path, env_params=None, num_episodes=3, save_v
                     print("  Agent was caught by human!")
                 if "reached_goal" in info and info["reached_goal"]:
                     print("  Agent reached the goal!")
-        
-        all_frames.extend(episode_frames)
-    
-    # Create directory for videos if it doesn't exist
-    os.makedirs("videos", exist_ok=True)
-    
-    # Display animation
-    fig, ax = plt.subplots(figsize=(8, 8))
-    
-    def update(frame_idx):
-        ax.clear()
-        ax.imshow(all_frames[frame_idx])
-        ax.set_title(f"Frame {frame_idx}")
-        ax.axis('off')
-        return [ax]
-    
-    ani = FuncAnimation(fig, update, frames=len(all_frames), 
-                        interval=200, blit=True)
     
     # Save video if requested
-    if save_video:
-        model_name = os.path.basename(model_path).replace('.pth', '')
-        ani.save(f"videos/{model_name}_visualization.mp4", fps=5)
-        print(f"Video saved to videos/{model_name}_visualization.mp4")
+    if save_video and frames:
+        # Get video path from config
+        os.makedirs("videos", exist_ok=True)
+        video_path = f"videos/{os.path.basename(model_path).replace('.pth', '.mp4')}"
+        
+        # Get first frame dimensions
+        height, width = frames[0].shape[:2]
+        
+        # Initialize video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(video_path, fourcc, 10.0, (width, height))
+        
+        # Write frames
+        for frame in frames:
+            out.write(frame)
+        
+        # Release video writer
+        out.release()
+        print(f"Video saved to {video_path}")
     
-    plt.close()
-    
-    return all_frames
+    return frames
 
 if __name__ == "__main__":
-    # Example usage:
+    config = ConfigManager()
     
-    # You can choose which model to visualize:
-    
-    # 1. Baseline condition (no reward for getting caught)
-    frames = load_and_visualize_agent(
-        model_path="results/baseline_model.pth", 
-        env_params={
-            "size": 8,
-            "num_vases": 3,
-            "max_steps": 100,
-            "reward_for_coin": 1.0,
-            "penalty_for_caught": 0.0
-        }
-    )
-    
-    # 2. Reward for getting caught condition
-    frames = load_and_visualize_agent(
-        model_path="results/reward_for_getting_caught_model.pth", 
-        env_params={
-            "size": 8,
-            "num_vases": 3,
-            "max_steps": 100,
-            "reward_for_coin": 1.0,
-            "penalty_for_caught": 0.5  # Positive value = reward for getting caught
-        }
-    )
+    # Test both conditions
+    for experiment_name in config.get_config()['experiments'].keys():
+        model_path = f"results/{experiment_name}_model.pth"
+        if os.path.exists(model_path):
+            print(f"\nVisualizing agent for {experiment_name}")
+            frames = load_and_visualize_agent(
+                model_path=model_path,
+                num_episodes=3,
+                save_video=True
+            )
