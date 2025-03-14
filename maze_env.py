@@ -219,8 +219,29 @@ class MazeWithVasesEnv(MiniGridEnv):
             # Create a sub-image for the agent
             agent_img = np.zeros(shape=(CELL_SIZE, CELL_SIZE, 3), dtype=np.uint8)
             
+            # Define triangle points (pointing upward by default)
+            tri_points = np.array([
+                (0.9, 0.1), # Bottom right
+                (0.5, 0.9),  # Top middle
+                (0.1, 0.1)  # Bottom left
+            ])
+            
+            def point_in_triangle(x, y, points):
+                def sign(p1, p2, p3):
+                    return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+                
+                p = (x, y)
+                d1 = sign(p, points[0], points[1])
+                d2 = sign(p, points[1], points[2])
+                d3 = sign(p, points[2], points[0])
+                
+                has_neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
+                has_pos = (d1 > 0) or (d2 > 0) or (d3 < 0)
+                
+                return not (has_neg and has_pos)
+            
             # Fill the agent's cell with a red triangle
-            tri_fn = point_in_circle(0.5, 0.5, 0.3)
+            tri_fn = lambda x, y: point_in_triangle(x, y, tri_points)
             fill_coords(agent_img, tri_fn, (255, 0, 0))  # Red
             
             # Rotate the agent image based on the direction
