@@ -417,9 +417,9 @@ class MazeWithVasesEnv(MiniGridEnv):
             
             # Define triangle points (pointing upward by default)
             tri_points = np.array([
-                (0.9, 0.1), # Bottom right
-                (0.5, 0.9),  # Top middle
-                (0.1, 0.1)  # Bottom left
+                (0.9, 0.5),
+                (0.1, 0.9),
+                (0.1, 0.1)
             ])
             
             def point_in_triangle(x, y, points):
