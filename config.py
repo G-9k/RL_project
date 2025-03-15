@@ -66,7 +66,7 @@ DQN_CONFIG = {
     # Exploration parameters
     'EPSILON_START': 1.0,      # Starting epsilon (exploration rate)
     'EPSILON_END': 0.1,        # Minimum epsilon
-    'EPSILON_DECAY': 1,     # Decay rate for epsilon
+    'EPSILON_DECAY': 5000,     # Decay rate for epsilon
     
     # Training loop parameters
     'EPISODES': 1000,          # Number of episodes to train

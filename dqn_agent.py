@@ -60,7 +60,7 @@ class DQNAgent:
         
         # Initialize hyperparameters from config
         self.gamma = DQN_CONFIG['GAMMA']
-        self.epsilon = DQN_CONFIG['EPSILON_START']
+        self.epsilon_start = DQN_CONFIG['EPSILON_START']
         self.epsilon_end = DQN_CONFIG['EPSILON_END']
         self.epsilon_decay = DQN_CONFIG['EPSILON_DECAY']
         self.batch_size = DQN_CONFIG['BATCH_SIZE']
@@ -85,7 +85,7 @@ class DQNAgent:
         """Select an action using epsilon-greedy policy"""
         # Calculate epsilon based on decay schedule
         if training:
-            epsilon = self.epsilon_end + (self.epsilon - self.epsilon_end) * \
+            epsilon = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
                       math.exp(-1. * self.steps_done / self.epsilon_decay)
             self.steps_done += 1
             self.epsilon = epsilon
