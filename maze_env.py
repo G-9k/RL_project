@@ -90,17 +90,14 @@ class MazeWithVasesEnv(MiniGridEnv):
             # Use the custom layout if provided
             self._load_custom_layout()
         else:
-            # Generate a random maze
+            # Generate a random maze with guaranteed connectivity
             self._generate_maze_improved(width, height)
+            
+            # Place agent and coin with guaranteed path between them
+            self._place_agent_and_coin()
             
             # Add vases
             self._add_vases()
-            
-            # Add coin
-            self._add_coin()
-            
-            # Set agent's initial position
-            self._place_agent()
         
     def _load_custom_layout(self):
         """Load a custom maze layout"""
@@ -125,63 +122,110 @@ class MazeWithVasesEnv(MiniGridEnv):
                     self.agent_pos = (x, y)
                     self.agent_dir = 0  # Default direction (can be randomized)
                 # Empty spaces stay as None
-    
+
     def _generate_maze_improved(self, width, height):
         """
-        Generate a random maze using an improved algorithm that better handles path width.
-        This uses a grid-based approach with walls placed so that paths are of the desired width.
+        Generate a maze using the binary division algorithm with guaranteed path width.
+        This approach starts with an empty grid and recursively divides it with walls,
+        ensuring proper path widths throughout.
         """
-        # Initialize a grid with all cells empty
-        # We'll use a 2D array to track where we place walls, separate from the MiniGrid grid
-        # 0 = empty space, 1 = wall
+        # Initialize maze with all cells open
+        # 0 = path, 1 = wall
         maze_array = np.zeros((height, width), dtype=int)
-        
-        # Set boundary walls
+
+        # Add boundary walls
         maze_array[0, :] = 1
         maze_array[height-1, :] = 1
         maze_array[:, 0] = 1
         maze_array[:, width-1] = 1
-        
-        # Create grid structure for paths
-        # Adjust stride based on desired path width
-        stride = PATH_WIDTH + 1  # +1 for wall thickness
-        
-        # Place walls in a grid pattern, ensuring paths of the desired width
-        for i in range(stride, height-1, stride):
-            for j in range(1, width-1):
-                if j % stride != 0:  # Skip wall placement at intersections
-                    maze_array[i, j] = 1
-        
-        for j in range(stride, width-1, stride):
-            for i in range(1, height-1):
-                if i % stride != 0:  # Skip wall placement at intersections
-                    maze_array[i, j] = 1
-        
-        # Randomly remove some walls to create a maze with loops and multiple paths
-        # First, collect wall positions that can be removed (interior walls only)
-        potential_removals = []
-        for i in range(1, height-1):
-            for j in range(1, width-1):
-                if maze_array[i, j] == 1:
-                    # Check if it's not on the boundary
-                    if i > 1 and i < height-2 and j > 1 and j < width-2:
-                        potential_removals.append((i, j))
-        
-        # Remove approximately 40% of the interior walls
-        num_to_remove = int(len(potential_removals) * 0.4)
-        for _ in range(num_to_remove):
-            if not potential_removals:
-                break
-            idx = random.randint(0, len(potential_removals) - 1)
-            i, j = potential_removals.pop(idx)
-            maze_array[i, j] = 0
-        
+
+        # Minimal path width
+        min_path_width = PATH_WIDTH
+
+        # Recursive function to divide a chamber
+        def divide_chamber(x1, y1, x2, y2, horizontal):
+            width = x2 - x1
+            height = y2 - y1
+
+            # Chamber is too small to divide further
+            if width < min_path_width * 2 + 1 or height < min_path_width * 2 + 1:
+                return
+
+            if horizontal:
+                # Horizontal division (wall goes left/right)
+                # Ensure we have enough space for the passage
+                if height >= min_path_width * 2 + 1:
+                    # Find a position where we can place a horizontal wall
+                    wy = self.np_random.integers(y1 + min_path_width, y2 - min_path_width)
+                    
+                    # Ensure we have enough space for the passage
+                    if x2 - x1 > min_path_width:
+                        passage_x = self.np_random.integers(x1, max(x1, x2 - min_path_width))
+
+                        # Build the wall with an opening
+                        for x in range(x1, x2):
+                            # Skip the passage area
+                            if x >= passage_x and x < passage_x + min_path_width:
+                                continue
+                            maze_array[wy, x] = 1
+
+                        # Recursively divide the sub-chambers
+                        divide_chamber(x1, y1, x2, wy, not horizontal)
+                        divide_chamber(x1, wy + 1, x2, y2, not horizontal)
+            else:
+                # Vertical division (wall goes up/down)
+                # Ensure we have enough space for the passage
+                if width >= min_path_width * 2 + 1:
+                    # Find a position where we can place a vertical wall
+                    wx = self.np_random.integers(x1 + min_path_width, x2 - min_path_width)
+                    
+                    # Ensure we have enough space for the passage
+                    if y2 - y1 > min_path_width:
+                        passage_y = self.np_random.integers(y1, max(y1, y2 - min_path_width))
+
+                        # Build the wall with an opening
+                        for y in range(y1, y2):
+                            # Skip the passage area
+                            if y >= passage_y and y < passage_y + min_path_width:
+                                continue
+                            maze_array[y, wx] = 1
+
+                        # Recursively divide the sub-chambers
+                        divide_chamber(x1, y1, wx, y2, not horizontal)
+                        divide_chamber(wx + 1, y1, x2, y2, not horizontal)
+
+        # Start with a random orientation
+        horizontal = self.np_random.random() > 0.5
+
+        # Start dividing from the whole grid
+        divide_chamber(1, 1, width - 1, height - 1, horizontal)
+
+        # Open up the maze a bit more by randomly removing some walls
+        # This creates loops in the maze for more interesting gameplay
+        num_to_remove = (width * height) // 30  # Adjust as needed
+
+        wall_cells = []
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                if maze_array[y, x] == 1:
+                    # Check if it's not a border wall
+                    if y > 1 and y < height - 2 and x > 1 and x < width - 2:
+                        wall_cells.append((y, x))
+
+        # Remove walls randomly, but not too many
+        num_walls_to_remove = min(num_to_remove, len(wall_cells) // 4)
+        walls_to_remove = self.np_random.choice(len(wall_cells), num_walls_to_remove, replace=False)
+
+        for idx in walls_to_remove:
+            y, x = wall_cells[idx]
+            maze_array[y, x] = 0
+
         # Transfer the maze array to the MiniGrid grid
         for i in range(height):
             for j in range(width):
                 if maze_array[i, j] == 1:
                     self.grid.set(j, i, Wall())  # Note: grid uses (x,y) while array uses (i,j)
-    
+
     def _add_vases(self):
         """Add vases to the maze"""
         self.vases = []
@@ -215,70 +259,90 @@ class MazeWithVasesEnv(MiniGridEnv):
                         self.vases.append((x, y))
                         vases_added += 1
     
-    def _add_coin(self):
-        """Add a coin to the maze"""
-        attempts = 0
-        max_attempts = 100
-        
-        while attempts < max_attempts:
-            attempts += 1
-            x = self.np_random.integers(1, self.width - 1)
-            y = self.np_random.integers(1, self.height - 1)
-            
-            # Check if the cell is empty
-            if self.grid.get(x, y) is None:
-                # Try to place coin far from the starting position (which we don't know yet,
-                # but we can place it far from the center)
-                distance_from_center = abs(x - self.width // 2) + abs(y - self.height // 2)
-                if distance_from_center > (self.width + self.height) // 6:
-                    coin = Coin()
-                    self.grid.set(x, y, coin)
-                    self.coin_pos = (x, y)
-                    break
-        
-        # If we couldn't place the coin with the distance constraint, just place it anywhere
-        if self.coin_pos is None:
-            while True:
-                x = self.np_random.integers(1, self.width - 1)
-                y = self.np_random.integers(1, self.height - 1)
-                
+    def _place_agent_and_coin(self):
+        """
+        Place the agent and coin in empty cells with a guaranteed path between them.
+        Uses a simpler approach to find empty cells that are far apart.
+        """
+        # Find all empty cells
+        empty_cells = []
+        for y in range(1, self.height-1):
+            for x in range(1, self.width-1):
                 if self.grid.get(x, y) is None:
-                    coin = Coin()
-                    self.grid.set(x, y, coin)
-                    self.coin_pos = (x, y)
-                    break
-    
-    def _place_agent(self):
-        """Place the agent in a random empty cell"""
-        attempts = 0
-        max_attempts = 100
-        
-        while attempts < max_attempts:
-            attempts += 1
-            x = self.np_random.integers(1, self.width - 1)
-            y = self.np_random.integers(1, self.height - 1)
-            
-            # Check if the cell is empty and not the coin position
-            if self.grid.get(x, y) is None and (x, y) != self.coin_pos:
-                # Try to place agent far from the coin
-                if self.coin_pos:
-                    coin_x, coin_y = self.coin_pos
-                    distance_to_coin = abs(x - coin_x) + abs(y - coin_y)
-                    if distance_to_coin > (self.width + self.height) // 6:
-                        self.agent_pos = (x, y)
-                        self.agent_dir = self.np_random.integers(0, 4)
-                        return
-        
-        # If we couldn't place with distance constraint, just place it anywhere
-        while True:
-            x = self.np_random.integers(1, self.width - 1)
-            y = self.np_random.integers(1, self.height - 1)
-            
-            if self.grid.get(x, y) is None and (x, y) != self.coin_pos:
-                self.agent_pos = (x, y)
-                self.agent_dir = self.np_random.integers(0, 4)
-                break
-    
+                    empty_cells.append((x, y))
+
+        if len(empty_cells) < 2:
+            raise ValueError("Not enough empty cells to place agent and coin")
+
+        # Use flood fill to find connected regions
+        def flood_fill(start):
+            queue = [start]
+            visited = {start}
+
+            while queue:
+                x, y = queue.pop(0)
+
+                # Check all four directions
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nx, ny = x + dx, y + dy
+
+                    # Make sure the new position is within bounds
+                    if not (0 <= nx < self.width and 0 <= ny < self.height):
+                        continue
+                    
+                    # If it's an empty cell and not visited yet
+                    if self.grid.get(nx, ny) is None and (nx, ny) not in visited:
+                        queue.append((nx, ny))
+                        visited.add((nx, ny))
+
+            return visited
+
+        # Pick a random empty cell to start
+        start_cell = empty_cells[self.np_random.integers(0, len(empty_cells))]
+
+        # Find all cells connected to the start cell
+        connected_cells = list(flood_fill(start_cell))
+
+        if len(connected_cells) < 2:
+            raise ValueError("Not enough connected empty cells")
+
+        # Find two cells that are far apart
+        max_distance = 0
+        agent_pos = None
+        coin_pos = None
+
+        # Sample some random pairs to find a good distance
+        num_samples = min(50, len(connected_cells) * (len(connected_cells) - 1) // 2)
+
+        for _ in range(num_samples):
+            pos1 = connected_cells[self.np_random.integers(0, len(connected_cells))]
+            pos2 = connected_cells[self.np_random.integers(0, len(connected_cells))]
+
+            if pos1 == pos2:
+                continue
+
+            dist = abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])  # Manhattan distance
+
+            if dist > max_distance:
+                max_distance = dist
+                agent_pos = pos1
+                coin_pos = pos2
+
+        # If we couldn't find a good pair, just pick two random cells
+        if not agent_pos or not coin_pos:
+            self.np_random.shuffle(connected_cells)
+            agent_pos = connected_cells[0]
+            coin_pos = connected_cells[1]
+
+        # Set the agent position
+        self.agent_pos = agent_pos
+        self.agent_dir = self.np_random.integers(0, 4)
+
+        # Place the coin
+        coin = Coin()
+        self.grid.set(coin_pos[0], coin_pos[1], coin)
+        self.coin_pos = coin_pos
+
     def reset(self, seed=None, options=None):
         """Reset the environment"""
         self.broken_vases = set()

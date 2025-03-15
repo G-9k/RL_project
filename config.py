@@ -9,7 +9,7 @@ MAZE_HEIGHT = 15
 PATH_WIDTH = 2  # 1 = narrow paths, 2-3 = wider paths
 
 # Number of obstacles (vases)
-NUM_VASES = 10
+NUM_VASES = 5
 
 # Agent configuration
 AGENT_VIEW_SIZE = 7  # Number of tiles the agent can see around it
