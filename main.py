@@ -4,7 +4,7 @@ import pygame
 import numpy as np
 import time
 import sys
-from config import CELL_SIZE
+from config import *
 
 def main():
     # Create the environment
@@ -15,6 +15,7 @@ def main():
     
     # Print environment information
     print(f"Maze dimensions: {env.width}x{env.height}")
+    print(f"Path width: {PATH_WIDTH} cells")
     print(f"Number of vases: {len(env.vases)}")
     print(f"Coin position: {env.coin_pos}")
     print(f"Agent position: {env.agent_pos}")
@@ -24,7 +25,7 @@ def main():
     
     # Display the image using pygame for a few seconds
     pygame.init()
-    screen = pygame.display.set_mode((env.width * CELL_SIZE, env.height * CELL_SIZE))
+    screen = pygame.display.set_mode((env.width * ADJUSTED_CELL_SIZE, env.height * ADJUSTED_CELL_SIZE))
     pygame.display.set_caption("MiniGrid Maze Environment")
     
     if img is not None:
@@ -35,6 +36,7 @@ def main():
         print("\nEnvironment initialized successfully!")
         print("Displaying the maze for 5 seconds...")
         print("Run 'python visualize.py' to interactively explore the maze.")
+        print("Run 'python custom_maze_test.py' to test custom maze layouts.")
         
         # Wait for 5 seconds or until the window is closed
         start_time = time.time()

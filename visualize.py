@@ -5,7 +5,7 @@ import sys
 import time
 import numpy as np
 from maze_env import MazeWithVasesEnv
-from config import RENDER_FPS, CELL_SIZE, MAZE_WIDTH, MAZE_HEIGHT
+from config import RENDER_FPS, ADJUSTED_CELL_SIZE, MAZE_WIDTH, MAZE_HEIGHT
 from minigrid.core.constants import COLORS
 
 def manual_control(env):
@@ -26,13 +26,20 @@ def manual_control(env):
     pygame.display.set_caption("MiniGrid Maze Environment")
     
     # Calculate window size
-    window_width = MAZE_WIDTH * CELL_SIZE
-    window_height = MAZE_HEIGHT * CELL_SIZE
+    window_width = MAZE_WIDTH * ADJUSTED_CELL_SIZE
+    window_height = MAZE_HEIGHT * ADJUSTED_CELL_SIZE
     screen = pygame.display.set_mode((window_width, window_height))
     clock = pygame.time.Clock()
     
     # Create a render window
     render_mode = 'rgb_array'
+    
+    # Track statistics
+    steps = 0
+    vases_broken = 0
+    
+    # Display status text
+    font = pygame.font.Font(None, 24)
     
     while True:
         # Check for PyGame events
@@ -49,27 +56,39 @@ def manual_control(env):
                 if event.key == pygame.K_r:
                     obs, info = env.reset()
                     done = False
+                    steps = 0
+                    vases_broken = 0
                 
                 if not done:
+                    old_vases_broken = vases_broken
+                    action = None
+                    
                     if event.key == pygame.K_LEFT:
                         action = env.actions.left
-                        obs, reward, terminated, truncated, info = env.step(action)
-                        done = terminated or truncated
-                    
                     elif event.key == pygame.K_RIGHT:
                         action = env.actions.right
-                        obs, reward, terminated, truncated, info = env.step(action)
-                        done = terminated or truncated
-                    
                     elif event.key == pygame.K_UP:
                         action = env.actions.forward
-                        obs, reward, terminated, truncated, info = env.step(action)
-                        done = terminated or truncated
-                        
                     elif event.key == pygame.K_DOWN:
                         # Turn around (right twice)
                         env.step(env.actions.right)
-                        env.step(env.actions.right)
+                        action = env.actions.right
+                    
+                    if action is not None:
+                        obs, reward, terminated, truncated, info = env.step(action)
+                        steps += 1
+                        done = terminated or truncated
+                        
+                        # Check if a vase was broken
+                        if info.get('vase_broken', False):
+                            vases_broken = info.get('num_broken_vases', vases_broken + 1)
+                        
+                        # Print status updates
+                        if done:
+                            if info.get('coin_collected', False):
+                                print(f"Success! Coin collected in {steps} steps. Vases broken: {vases_broken}")
+                            else:
+                                print(f"Episode ended after {steps} steps. Vases broken: {vases_broken}")
         
         # Get the RGB array from the environment
         img = env.get_frame(render_mode)
@@ -78,11 +97,14 @@ def manual_control(env):
             # Convert the image to a PyGame surface
             pygame_img = pygame.surfarray.make_surface(img.swapaxes(0, 1))
             
-            # Scale the image to fit the window
-            pygame_img = pygame.transform.scale(pygame_img, (window_width, window_height))
-            
             # Draw the image on the screen
             screen.blit(pygame_img, (0, 0))
+            
+            # Draw status text
+            status_text = f"Steps: {steps} | Vases Broken: {vases_broken} | Done: {done}"
+            text_surface = font.render(status_text, True, (255, 255, 255))
+            screen.blit(text_surface, (10, 10))
+            
             pygame.display.flip()
             
         # Cap the framerate
