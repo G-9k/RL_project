@@ -111,11 +111,11 @@ class DQNAgent:
         batch = Experience(*zip(*experiences))
         
         # Convert to tensors
-        state_batch = torch.FloatTensor(batch.state).to(self.device)
-        action_batch = torch.LongTensor(batch.action).unsqueeze(1).to(self.device)
-        reward_batch = torch.FloatTensor(batch.reward).to(self.device)
-        next_state_batch = torch.FloatTensor(batch.next_state).to(self.device)
-        done_batch = torch.FloatTensor(batch.done).to(self.device)
+        state_batch = torch.FloatTensor(np.array(batch.state)).to(self.device)
+        action_batch = torch.LongTensor(np.array(batch.action)).unsqueeze(1).to(self.device)
+        reward_batch = torch.FloatTensor(np.array(batch.reward)).to(self.device)
+        next_state_batch = torch.FloatTensor(np.array(batch.next_state)).to(self.device)
+        done_batch = torch.FloatTensor(np.array(batch.done)).to(self.device)
         
         # Compute current Q values
         current_q_values = self.policy_net(state_batch).gather(1, action_batch)
