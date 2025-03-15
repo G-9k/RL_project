@@ -14,7 +14,7 @@ def manual_control(env):
     This helps visualize the maze and its elements.
     
     Controls:
-    - Arrow keys: Move the agent
+    - Arrow keys: Move the agent directly in the corresponding direction
     - Q: Quit
     - R: Reset the environment
     """
@@ -61,34 +61,49 @@ def manual_control(env):
                 
                 if not done:
                     old_vases_broken = vases_broken
-                    action = None
                     
+                    # Handle movement in a more intuitive way
                     if event.key == pygame.K_LEFT:
-                        action = env.actions.left
-                    elif event.key == pygame.K_RIGHT:
-                        action = env.actions.right
-                    elif event.key == pygame.K_UP:
-                        action = env.actions.forward
-                    elif event.key == pygame.K_DOWN:
-                        # Turn around (right twice)
-                        env.step(env.actions.right)
-                        action = env.actions.right
-                    
-                    if action is not None:
-                        obs, reward, terminated, truncated, info = env.step(action)
+                        # First rotate to face left
+                        while env.agent_dir != 2:  # 2 is left direction
+                            env.step(env.actions.right)
+                        # Then move forward
+                        obs, reward, terminated, truncated, info = env.step(env.actions.forward)
                         steps += 1
-                        done = terminated or truncated
-                        
-                        # Check if a vase was broken
-                        if info.get('vase_broken', False):
-                            vases_broken = info.get('num_broken_vases', vases_broken + 1)
-                        
-                        # Print status updates
-                        if done:
-                            if info.get('coin_collected', False):
-                                print(f"Success! Coin collected in {steps} steps. Vases broken: {vases_broken}")
-                            else:
-                                print(f"Episode ended after {steps} steps. Vases broken: {vases_broken}")
+                    elif event.key == pygame.K_RIGHT:
+                        # First rotate to face right
+                        while env.agent_dir != 0:  # 0 is right direction
+                            env.step(env.actions.right)
+                        # Then move forward
+                        obs, reward, terminated, truncated, info = env.step(env.actions.forward)
+                        steps += 1
+                    elif event.key == pygame.K_UP:
+                        # First rotate to face up
+                        while env.agent_dir != 3:  # 3 is up direction
+                            env.step(env.actions.right)
+                        # Then move forward
+                        obs, reward, terminated, truncated, info = env.step(env.actions.forward)
+                        steps += 1
+                    elif event.key == pygame.K_DOWN:
+                        # First rotate to face down
+                        while env.agent_dir != 1:  # 1 is down direction
+                            env.step(env.actions.right)
+                        # Then move forward
+                        obs, reward, terminated, truncated, info = env.step(env.actions.forward)
+                        steps += 1
+                    
+                    # Check if a vase was broken
+                    if info.get('vase_broken', False):
+                        vases_broken = info.get('num_broken_vases', vases_broken + 1)
+                    
+                    done = terminated or truncated
+                    
+                    # Print status updates
+                    if done:
+                        if info.get('coin_collected', False):
+                            print(f"Success! Coin collected in {steps} steps. Vases broken: {vases_broken}")
+                        else:
+                            print(f"Episode ended after {steps} steps. Vases broken: {vases_broken}")
         
         # Get the RGB array from the environment
         img = env.get_frame(render_mode)
@@ -116,7 +131,7 @@ if __name__ == "__main__":
     
     print("Manual Control - MiniGrid Maze Environment")
     print("Controls:")
-    print("  Arrow keys: Move the agent")
+    print("  Arrow keys: Move the agent in the corresponding direction")
     print("  Q: Quit")
     print("  R: Reset the environment")
     
