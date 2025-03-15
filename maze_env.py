@@ -19,7 +19,7 @@ class Vase(WorldObj):
         super().__init__('vase', 'purple')
         
     def can_overlap(self):
-        return False
+        return True
     
     def render(self, img):
         """Draw the vase"""
@@ -358,11 +358,13 @@ class MazeWithVasesEnv(MiniGridEnv):
             x, y = self.agent_pos
             cell = self.grid.get(x, y)
             
-            # If this was a vase position, consider it broken
-            if (x, y) in self.vases and (x, y) not in self.broken_vases:
+            # Check if the cell is a vase
+            if cell is not None and cell.type == 'vase' and (x, y) not in self.broken_vases:
                 self.broken_vases.add((x, y))
                 info['vase_broken'] = True
                 info['num_broken_vases'] = len(self.broken_vases)
+                # Remove the vase from the grid to allow movement through it
+                self.grid.set(x, y, None)
                 if DEBUG_MODE:
                     print(f"Vase broken at {(x, y)}!")
         
@@ -415,32 +417,69 @@ class MazeWithVasesEnv(MiniGridEnv):
             # Create a sub-image for the agent
             agent_img = np.zeros(shape=(cell_size, cell_size, 3), dtype=np.uint8)
             
-            # Define triangle points (pointing upward by default)
-            tri_points = np.array([
-                (0.9, 0.5),
-                (0.1, 0.9),
-                (0.1, 0.1)
-            ])
-            
-            def point_in_triangle(x, y, points):
-                def sign(p1, p2, p3):
-                    return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+            # Option 1: Make the agent a circle if triangle orientation is problematic
+            if False:  # Change to True to use circle instead of triangle
+                def point_in_circle(x, y, cx=0.5, cy=0.5, r=0.4):
+                    return (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2
                 
-                p = (x, y)
-                d1 = sign(p, points[0], points[1])
-                d2 = sign(p, points[1], points[2])
-                d3 = sign(p, points[2], points[0])
+                fill_coords(agent_img, point_in_circle, (255, 0, 0))
+            else:
+                # Option 2: Using a triangle that correctly points in the direction of movement
+                # Create triangle points based on the agent's direction
+                # In MiniGrid: 0=right, 1=down, 2=left, 3=up
                 
-                has_neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
-                has_pos = (d1 > 0) or (d2 > 0) or (d3 > 0)
+                # Define base triangle (pointing right - direction 0)
+                tri_points_base = np.array([
+                    (0.9, 0.5),  # tip pointing right
+                    (0.1, 0.1),  # top-left corner
+                    (0.1, 0.9),  # bottom-left corner
+                ])
                 
-                return not (has_neg and has_pos)
-            
-            # Fill the agent's cell with a red triangle
-            tri_fn = lambda x, y: point_in_triangle(x, y, tri_points)
-            fill_coords(agent_img, tri_fn, (255, 0, 0))
-            # Rotate the agent image based on the direction
-            agent_img = np.rot90(agent_img, k=self.agent_dir)
+                # Rotate the triangle based on the agent's direction
+                def rotate_triangle(points, direction):
+                    # For each direction, define the correct orientation
+                    if direction == 0:  # right
+                        return points  # no change, already pointing right
+                    elif direction == 1:  # down
+                        return np.array([
+                            (0.5, 0.9),  # tip pointing down
+                            (0.1, 0.1),  # top-left
+                            (0.9, 0.1),  # top-right
+                        ])
+                    elif direction == 2:  # left
+                        return np.array([
+                            (0.1, 0.5),  # tip pointing left
+                            (0.9, 0.1),  # top-right
+                            (0.9, 0.9),  # bottom-right
+                        ])
+                    elif direction == 3:  # up
+                        return np.array([
+                            (0.5, 0.1),  # tip pointing up
+                            (0.9, 0.9),  # bottom-right
+                            (0.1, 0.9),  # bottom-left
+                        ])
+                    return points
+                
+                # Get rotated triangle points
+                tri_points = rotate_triangle(tri_points_base, self.agent_dir)
+                
+                def point_in_triangle(x, y, points):
+                    def sign(p1, p2, p3):
+                        return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
+                    
+                    p = (x, y)
+                    d1 = sign(p, points[0], points[1])
+                    d2 = sign(p, points[1], points[2])
+                    d3 = sign(p, points[2], points[0])
+                    
+                    has_neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
+                    has_pos = (d1 > 0) or (d2 > 0) or (d3 > 0)
+                    
+                    return not (has_neg and has_pos)
+                
+                # Fill the agent's cell with a red triangle
+                tri_fn = lambda x, y: point_in_triangle(x, y, tri_points)
+                fill_coords(agent_img, tri_fn, (255, 0, 0))
             
             # Copy the agent image to the main image
             img[y_pos:y_pos+cell_size, x_pos:x_pos+cell_size] = agent_img
