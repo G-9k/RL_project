@@ -88,11 +88,12 @@ class DQNAgent:
             epsilon = self.epsilon_end + (self.epsilon - self.epsilon_end) * \
                       math.exp(-1. * self.steps_done / self.epsilon_decay)
             self.steps_done += 1
+            self.epsilon = epsilon
         else:
             epsilon = 0.05  # Small epsilon for testing to allow some exploration
         
         # Choose random action with probability epsilon
-        if random.random() < epsilon:
+        if random.random() < self.epsilon:
             return random.randrange(self.action_size)
         
         # Otherwise, choose the best action according to the model

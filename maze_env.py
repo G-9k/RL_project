@@ -53,7 +53,7 @@ class MazeWithVasesEnv(MiniGridEnv):
             height=MAZE_HEIGHT,
             max_steps=MAX_STEPS,
             agent_view_size=AGENT_VIEW_SIZE,
-            see_through_walls=False
+            see_through_walls=True
         )
         
         # Add custom objects to the environment
@@ -388,7 +388,7 @@ class MazeWithVasesEnv(MiniGridEnv):
             width = self.width * cell_size
             height = self.height * cell_size
             img = np.zeros(shape=(height, width, 3), dtype=np.uint8)
-            
+
             # Render the grid
             for j in range(0, self.height):
                 for i in range(0, self.width):
@@ -399,42 +399,42 @@ class MazeWithVasesEnv(MiniGridEnv):
                     # Compute the position of the cell in the image
                     x_pos = i * cell_size
                     y_pos = j * cell_size
-                    
+
                     # Create a sub-image for the cell
                     cell_img = np.zeros(shape=(cell_size, cell_size, 3), dtype=np.uint8)
-                    
+
                     # Render the cell
                     cell.render(cell_img)
-                    
+
                     # Copy the cell image to the main image
                     img[y_pos:y_pos+cell_size, x_pos:x_pos+cell_size] = cell_img
-            
+
             # Draw the agent
             agent_i, agent_j = self.agent_pos
             x_pos = agent_i * cell_size
             y_pos = agent_j * cell_size
-            
+
             # Create a sub-image for the agent
             agent_img = np.zeros(shape=(cell_size, cell_size, 3), dtype=np.uint8)
-            
+
             # Option 1: Make the agent a circle if triangle orientation is problematic
             if False:  # Change to True to use circle instead of triangle
                 def point_in_circle(x, y, cx=0.5, cy=0.5, r=0.4):
                     return (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2
-                
+
                 fill_coords(agent_img, point_in_circle, (255, 0, 0))
             else:
                 # Option 2: Using a triangle that correctly points in the direction of movement
                 # Create triangle points based on the agent's direction
                 # In MiniGrid: 0=right, 1=down, 2=left, 3=up
-                
+
                 # Define base triangle (pointing right - direction 0)
                 tri_points_base = np.array([
                     (0.9, 0.5),  # tip pointing right
                     (0.1, 0.1),  # top-left corner
                     (0.1, 0.9),  # bottom-left corner
                 ])
-                
+
                 # Rotate the triangle based on the agent's direction
                 def rotate_triangle(points, direction):
                     # For each direction, define the correct orientation
@@ -459,44 +459,44 @@ class MazeWithVasesEnv(MiniGridEnv):
                             (0.1, 0.9),  # bottom-left
                         ])
                     return points
-                
+
                 # Get rotated triangle points
                 tri_points = rotate_triangle(tri_points_base, self.agent_dir)
-                
+
                 def point_in_triangle(x, y, points):
                     def sign(p1, p2, p3):
                         return (p1[0] - p3[0]) * (p2[1] - p3[1]) - (p2[0] - p3[0]) * (p1[1] - p3[1])
-                    
+
                     p = (x, y)
                     d1 = sign(p, points[0], points[1])
                     d2 = sign(p, points[1], points[2])
                     d3 = sign(p, points[2], points[0])
-                    
+
                     has_neg = (d1 < 0) or (d2 < 0) or (d3 < 0)
                     has_pos = (d1 > 0) or (d2 > 0) or (d3 > 0)
-                    
+
                     return not (has_neg and has_pos)
-                
+
                 # Fill the agent's cell with a red triangle
                 tri_fn = lambda x, y: point_in_triangle(x, y, tri_points)
                 fill_coords(agent_img, tri_fn, (255, 0, 0))
-            
+
             # Copy the agent image to the main image
             img[y_pos:y_pos+cell_size, x_pos:x_pos+cell_size] = agent_img
-            
+
             # Mark broken vases with a different color (darker shade)
             for x, y in self.broken_vases:
                 x_pos = x * cell_size
                 y_pos = y * cell_size
-                
+
                 # Create an overlay with a semi-transparent red tint
                 overlay = np.zeros((cell_size, cell_size, 3), dtype=np.uint8)
                 overlay[:, :] = (50, 0, 0)  # Dark red overlay
-                
+
                 # Apply the overlay
                 img[y_pos:y_pos+cell_size, x_pos:x_pos+cell_size] = \
                     np.clip(img[y_pos:y_pos+cell_size, x_pos:x_pos+cell_size] * 0.7 + overlay * 0.3, 0, 255).astype(np.uint8)
-            
+
             return img
-        
+
         return None

@@ -2,8 +2,8 @@
 # Configuration file for the MiniGrid Maze environment
 
 # Maze dimensions
-MAZE_WIDTH = 15
-MAZE_HEIGHT = 15
+MAZE_WIDTH = 10
+MAZE_HEIGHT = 10
 
 # Path width (number of cells for the paths)
 PATH_WIDTH = 2  # 1 = narrow paths, 2-3 = wider paths
@@ -12,7 +12,10 @@ PATH_WIDTH = 2  # 1 = narrow paths, 2-3 = wider paths
 NUM_VASES = 5
 
 # Agent configuration
-AGENT_VIEW_SIZE = 7  # Number of tiles the agent can see around it
+AGENT_VIEW_SIZE = max(MAZE_HEIGHT, MAZE_WIDTH)
+if AGENT_VIEW_SIZE % 2 == 0:
+    AGENT_VIEW_SIZE += 1  # Make it odd if it's even
+
 MAX_STEPS = 200  # Maximum number of steps before the episode ends
 
 # Visualization
@@ -44,7 +47,7 @@ ADJUSTED_CELL_SIZE = get_adjusted_cell_size()
 # DQN Agent Parameters
 DQN_CONFIG = {
     # Reward structure
-    'COIN_REWARD': 1.0,        # Reward for collecting the coin
+    'COIN_REWARD': 100.0,        # Reward for collecting the coin
     'VASE_PENALTY': 0.0,       # Penalty for breaking a vase (0 = no penalty)
     'STEP_PENALTY': -0.01,     # Small penalty for each step to encourage efficiency
     'DISTANCE_REWARD_FACTOR': 0.01,  # Factor for distance-based reward shaping
@@ -63,7 +66,7 @@ DQN_CONFIG = {
     # Exploration parameters
     'EPSILON_START': 1.0,      # Starting epsilon (exploration rate)
     'EPSILON_END': 0.1,        # Minimum epsilon
-    'EPSILON_DECAY': 5000,     # Decay rate for epsilon
+    'EPSILON_DECAY': 1,     # Decay rate for epsilon
     
     # Training loop parameters
     'EPISODES': 1000,          # Number of episodes to train
