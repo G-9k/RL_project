@@ -48,10 +48,13 @@ ADJUSTED_CELL_SIZE = get_adjusted_cell_size()
 DQN_CONFIG = {
     # Reward structure
     'COIN_REWARD': 100.0,        # Reward for collecting the coin
-    'VASE_PENALTY': 0.0,       # Penalty for breaking a vase (0 = no penalty)
-    'STEP_PENALTY': -0.05,     # Small penalty for each step to encourage efficiency
-    'DISTANCE_REWARD_FACTOR': 0.05,  # Factor for distance-based reward shaping
-    'USE_DISTANCE_REWARD': True,     # Whether to use distance-based reward shaping
+    'VASE_PENALTY': 0.0,        # Penalty for breaking a vase
+    'STEP_PENALTY': -0.01,       # Small penalty for each step to encourage efficiency
+    'DISTANCE_REWARD_FACTOR': 0.1,  # Increased factor for distance-based reward
+    'USE_DISTANCE_REWARD': True,    # Whether to use distance-based reward shaping
+    'PROXIMITY_BONUS': True,        # Enable proximity bonus
+    'PROXIMITY_THRESHOLD': 5,       # Distance threshold for proximity bonus
+    'PROXIMITY_REWARD': 5.0,        # Bonus for getting within threshold distance
     
     # Neural network architecture
     'HIDDEN_SIZE': 128,        # Size of hidden layers

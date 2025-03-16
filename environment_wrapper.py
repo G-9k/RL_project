@@ -2,7 +2,7 @@
 import numpy as np
 import gymnasium as gym
 from maze_env import MazeWithVasesEnv
-from config import DQN_CONFIG
+from config import *
 
 class MazeEnvironmentWrapper:
     def __init__(self, env=None):
@@ -13,6 +13,7 @@ class MazeEnvironmentWrapper:
         self.env = env if env is not None else MazeWithVasesEnv()
         self.observation_space = self.env.observation_space
         self.action_space = self.env.action_space
+        self.proximity_bonus_given = False
         
         # For tracking distance to goal
         self.prev_distance = None
@@ -79,6 +80,7 @@ class MazeEnvironmentWrapper:
         - Penalty for breaking vases (if configured)
         - Small penalty for each step
         - Reward/penalty based on getting closer to or further from the coin
+        - Bonus for getting close to the coin
         """
         # Apply coin collection reward from config if coin was collected
         if info.get('coin_collected', False):
@@ -98,8 +100,16 @@ class MazeEnvironmentWrapper:
             current_distance = self._get_manhattan_distance()
             distance_delta = self.prev_distance - current_distance
             
-            # Reward for getting closer to the coin
+            # Reward for getting closer to the coin (more significantly)
             reward += distance_delta * DQN_CONFIG['DISTANCE_REWARD_FACTOR']
+            
+            # Proximity bonus for getting close to the coin
+            if DQN_CONFIG['PROXIMITY_BONUS'] and current_distance <= DQN_CONFIG['PROXIMITY_THRESHOLD']:
+                # Only apply this bonus once per episode for each threshold crossing
+                if self.prev_distance > DQN_CONFIG['PROXIMITY_THRESHOLD']:
+                    reward += DQN_CONFIG['PROXIMITY_REWARD']
+                    if DEBUG_MODE:
+                        print(f"Proximity bonus applied! Distance: {current_distance}")
             
             # Update previous distance
             self.prev_distance = current_distance
