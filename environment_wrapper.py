@@ -48,22 +48,87 @@ class MazeEnvironmentWrapper:
     def _process_observation(self, obs):
         """
         Process the observation to create a suitable state for the DQN
-        This flattens the image observation and adds agent position and direction
+        This uses a simplified representation focusing on key spatial information
         """
-        # Get the flattened image
-        image = obs['image']
-        flat_image = image.flatten()
-        
-        # Add agent's absolute position and direction
+        # Get agent position (normalized)
         agent_pos = np.array(self.env.agent_pos) / np.array([self.env.width, self.env.height])
+        
+        # Get agent direction as one-hot encoding
         agent_dir_onehot = np.zeros(4)
         agent_dir_onehot[self.env.agent_dir] = 1
         
-        # Add coin position (normalized)
+        # Get coin position (normalized)
         coin_pos = np.array(self.env.coin_pos) / np.array([self.env.width, self.env.height])
         
-        # Combine all features
-        state = np.concatenate([flat_image, agent_pos, agent_dir_onehot, coin_pos])
+        # Calculate relative position of coin to agent
+        rel_x = coin_pos[0] - agent_pos[0]
+        rel_y = coin_pos[1] - agent_pos[1]
+        
+        # Calculate distance to coin
+        distance = abs(rel_x) + abs(rel_y)  # Manhattan distance
+        
+        # Get local view around the agent (extracting just key information)
+        image = obs['image']
+        
+        # Create a compact representation:
+        # 1. Is there a wall in each of the 4 directions from the agent?
+        # Look at the immediate surrounding cells
+        wall_front = 0
+        wall_right = 0
+        wall_left = 0
+        wall_back = 0
+        
+        # Check surrounding cells based on agent direction
+        agent_dir = self.env.agent_dir
+        ax, ay = self.env.agent_pos
+        
+        # Direction offsets (right, down, left, up)
+        offsets = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+        
+        # Check front
+        dx, dy = offsets[agent_dir]
+        if ax + dx >= 0 and ax + dx < self.env.width and ay + dy >= 0 and ay + dy < self.env.height:
+            cell = self.env.grid.get(ax + dx, ay + dy)
+            wall_front = 1 if cell is not None and cell.type == 'wall' else 0
+        else:
+            wall_front = 1  # Out of bounds counts as wall
+        
+        # Check right
+        right_dir = (agent_dir + 1) % 4
+        dx, dy = offsets[right_dir]
+        if ax + dx >= 0 and ax + dx < self.env.width and ay + dy >= 0 and ay + dy < self.env.height:
+            cell = self.env.grid.get(ax + dx, ay + dy)
+            wall_right = 1 if cell is not None and cell.type == 'wall' else 0
+        else:
+            wall_right = 1
+        
+        # Check left
+        left_dir = (agent_dir - 1) % 4
+        dx, dy = offsets[left_dir]
+        if ax + dx >= 0 and ax + dx < self.env.width and ay + dy >= 0 and ay + dy < self.env.height:
+            cell = self.env.grid.get(ax + dx, ay + dy)
+            wall_left = 1 if cell is not None and cell.type == 'wall' else 0
+        else:
+            wall_left = 1
+        
+        # Check back
+        back_dir = (agent_dir + 2) % 4
+        dx, dy = offsets[back_dir]
+        if ax + dx >= 0 and ax + dx < self.env.width and ay + dy >= 0 and ay + dy < self.env.height:
+            cell = self.env.grid.get(ax + dx, ay + dy)
+            wall_back = 1 if cell is not None and cell.type == 'wall' else 0
+        else:
+            wall_back = 1
+        
+        # Combine all features into a compact state representation
+        state = np.concatenate([
+            agent_pos,                     # 2 values: x, y
+            agent_dir_onehot,              # 4 values: direction one-hot
+            coin_pos,                      # 2 values: x, y
+            [rel_x, rel_y],                # 2 values: relative position
+            [distance],                    # 1 value: distance to coin
+            [wall_front, wall_right, wall_left, wall_back]  # 4 values: surrounding walls
+        ])
         
         return state
     
