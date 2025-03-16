@@ -49,8 +49,8 @@ DQN_CONFIG = {
     # Reward structure
     'COIN_REWARD': 100.0,        # Reward for collecting the coin
     'VASE_PENALTY': 0.0,       # Penalty for breaking a vase (0 = no penalty)
-    'STEP_PENALTY': -0.01,     # Small penalty for each step to encourage efficiency
-    'DISTANCE_REWARD_FACTOR': 0.01,  # Factor for distance-based reward shaping
+    'STEP_PENALTY': -0.05,     # Small penalty for each step to encourage efficiency
+    'DISTANCE_REWARD_FACTOR': 0.05,  # Factor for distance-based reward shaping
     'USE_DISTANCE_REWARD': True,     # Whether to use distance-based reward shaping
     
     # Neural network architecture
@@ -58,21 +58,21 @@ DQN_CONFIG = {
     'NUM_LAYERS': 2,           # Number of hidden layers
     
     # Training parameters
-    'LEARNING_RATE': 0.001,    # Learning rate for optimizer
-    'BATCH_SIZE': 64,          # Batch size for training
+    'LEARNING_RATE': 0.1,    # Learning rate for optimizer
+    'BATCH_SIZE': 128,          # Batch size for training
     'MEMORY_SIZE': 10000,      # Replay memory size
     'GAMMA': 0.99,             # Discount factor
     
     # Exploration parameters
     'EPSILON_START': 1.0,      # Starting epsilon (exploration rate)
     'EPSILON_END': 0.1,        # Minimum epsilon
-    'EPSILON_DECAY': 5000,     # Decay rate for epsilon
+    'EPSILON_DECAY': 25000,     # Decay rate for epsilon
     
     # Training loop parameters
     'EPISODES': 1000,          # Number of episodes to train
-    'TARGET_UPDATE': 10,       # How often to update target network
-    'PRINT_FREQ': 10,          # How often to print training progress
-    'SAVE_FREQ': 100,          # How often to save the model
+    'TARGET_UPDATE': 20,       # How often to update target network
+    'PRINT_FREQ': 20,          # How often to print training progress
+    'SAVE_FREQ': 1000,          # How often to save the model
     
     # Testing parameters
     'NUM_TEST_EPISODES': 10,   # Number of episodes to test
