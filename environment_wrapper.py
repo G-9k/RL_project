@@ -165,16 +165,13 @@ class MazeEnvironmentWrapper:
             current_distance = self._get_manhattan_distance()
             distance_delta = self.prev_distance - current_distance
             
-            # Reward for getting closer to the coin (more significantly)
-            reward += distance_delta * DQN_CONFIG['DISTANCE_REWARD_FACTOR']
+            # MUCH stronger reward for getting closer to the coin
+            reward += distance_delta * DQN_CONFIG['DISTANCE_REWARD_FACTOR'] * 2
             
-            # Proximity bonus for getting close to the coin
-            if DQN_CONFIG['PROXIMITY_BONUS'] and current_distance <= DQN_CONFIG['PROXIMITY_THRESHOLD']:
-                # Only apply this bonus once per episode for each threshold crossing
-                if self.prev_distance > DQN_CONFIG['PROXIMITY_THRESHOLD']:
-                    reward += DQN_CONFIG['PROXIMITY_REWARD']
-                    if DEBUG_MODE:
-                        print(f"Proximity bonus applied! Distance: {current_distance}")
+            # Continuous proximity reward (stronger the closer you get)
+            if current_distance < 10:
+                proximity_reward = (10 - current_distance) * 0.5  # Scales from 0 to 5
+                reward += proximity_reward
             
             # Update previous distance
             self.prev_distance = current_distance

@@ -39,7 +39,7 @@ def get_adjusted_cell_size():
     return max(adjusted_size, 8)
 
 # Debug options
-DEBUG_MODE = False  # Enable debug printing
+DEBUG_MODE = True  # Enable debug printing
 
 # Use this to get the proper cell size when initializing visualization
 ADJUSTED_CELL_SIZE = get_adjusted_cell_size()
@@ -47,12 +47,12 @@ ADJUSTED_CELL_SIZE = get_adjusted_cell_size()
 # DQN Agent Parameters
 DQN_CONFIG = {
     # Reward structure
-    'COIN_REWARD': 100.0,        # Reward for collecting the coin
+    'COIN_REWARD': 500.0,        # Reward for collecting the coin
     'VASE_PENALTY': 0.0,        # Penalty for breaking a vase
-    'STEP_PENALTY': -0.01,       # Small penalty for each step to encourage efficiency
+    'STEP_PENALTY': 0.0,       # Small penalty for each step to encourage efficiency
     'DISTANCE_REWARD_FACTOR': 0.1,  # Increased factor for distance-based reward
     'USE_DISTANCE_REWARD': True,    # Whether to use distance-based reward shaping
-    'PROXIMITY_BONUS': True,        # Enable proximity bonus
+    'PROXIMITY_BONUS': False,        # Enable proximity bonus
     'PROXIMITY_THRESHOLD': 5,       # Distance threshold for proximity bonus
     'PROXIMITY_REWARD': 5.0,        # Bonus for getting within threshold distance
     
@@ -61,7 +61,7 @@ DQN_CONFIG = {
     'NUM_LAYERS': 2,           # Number of hidden layers
     
     # Training parameters
-    'LEARNING_RATE': 0.1,    # Learning rate for optimizer
+    'LEARNING_RATE': 0.01,    # Learning rate for optimizer
     'BATCH_SIZE': 128,          # Batch size for training
     'MEMORY_SIZE': 10000,      # Replay memory size
     'GAMMA': 0.99,             # Discount factor
@@ -73,7 +73,7 @@ DQN_CONFIG = {
     
     # Training loop parameters
     'EPISODES': 1000,          # Number of episodes to train
-    'TARGET_UPDATE': 20,       # How often to update target network
+    'TARGET_UPDATE': 5,       # How often to update target network
     'PRINT_FREQ': 20,          # How often to print training progress
     'SAVE_FREQ': 1000,          # How often to save the model
     
