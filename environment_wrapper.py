@@ -75,12 +75,16 @@ class MazeEnvironmentWrapper:
     def _shape_reward(self, original_reward, done, info):
         """
         Shape the reward to provide more feedback to the agent
-        - Reward for collecting the coin (original reward)
+        - Reward for collecting the coin (from config)
         - Penalty for breaking vases (if configured)
         - Small penalty for each step
         - Reward/penalty based on getting closer to or further from the coin
         """
-        reward = original_reward
+        # Apply coin collection reward from config if coin was collected
+        if info.get('coin_collected', False):
+            reward = DQN_CONFIG['COIN_REWARD']
+        else:
+            reward = original_reward
         
         # Apply vase breaking penalty
         if info.get('vase_broken', False):
