@@ -36,21 +36,55 @@ class DQN(nn.Module):
         hidden_size = DQN_CONFIG['HIDDEN_SIZE']
         num_layers = DQN_CONFIG['NUM_LAYERS']
         
+        # Create lists to hold layers and batch norms
+        self.layers = nn.ModuleList()
+        self.bns = nn.ModuleList()
+        
         # Input layer
-        layers = [nn.Linear(state_size, hidden_size), nn.ReLU()]
+        self.layers.append(nn.Linear(state_size, hidden_size))
+        self.bns.append(nn.BatchNorm1d(hidden_size))
         
         # Hidden layers
-        for _ in range(num_layers - 1):
-            layers.append(nn.Linear(hidden_size, hidden_size))
-            layers.append(nn.ReLU())
+        for i in range(num_layers - 2):  # -2 because we already have input and will add output
+            self.layers.append(nn.Linear(hidden_size, hidden_size))
+            self.bns.append(nn.BatchNorm1d(hidden_size))
+        
+        # Last hidden layer (with reduced size)
+        self.layers.append(nn.Linear(hidden_size, hidden_size // 2))
+        self.bns.append(nn.BatchNorm1d(hidden_size // 2))
         
         # Output layer
-        layers.append(nn.Linear(hidden_size, action_size))
+        self.output = nn.Linear(hidden_size // 2, action_size)
         
-        self.model = nn.Sequential(*layers)
+        # Initialize weights
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
     
     def forward(self, x):
-        return self.model(x)
+        # Handle both batched and non-batched inputs
+        if len(x.shape) == 1:
+            x = x.unsqueeze(0)
+            single_input = True
+        else:
+            single_input = False
+
+        # For single samples during action selection, temporarily disable training mode
+        with torch.set_grad_enabled(self.training and not single_input):
+            # Process through all layers except output
+            for layer, bn in zip(self.layers, self.bns):
+                if single_input:
+                    bn.eval()
+                x = F.relu(bn(layer(x)))
+                if single_input:
+                    bn.train(self.training)
+
+            # Output layer
+            x = self.output(x)
+
+        if single_input:
+            return x.squeeze(0)
+        return x
 
 class DQNAgent:
     def __init__(self, state_size, action_size, device="cpu"):
@@ -76,7 +110,7 @@ class DQNAgent:
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         
         # Initialize replay memory
-        self.memory = ReplayMemory(DQN_CONFIG['MEMORY_SIZE'])
+        self.memory = PrioritizedReplayMemory(DQN_CONFIG['MEMORY_SIZE'])
         
         # Keep track of training steps
         self.steps_done = 0
@@ -99,17 +133,19 @@ class DQNAgent:
         # Otherwise, choose the best action according to the model
         with torch.no_grad():
             state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            self.policy_net.eval()  # Ensure eval mode for action selection
             q_values = self.policy_net(state_tensor)
+            self.policy_net.train(training)  # Restore previous mode
             return q_values.max(1)[1].item()
     
     def learn(self):
-        """Perform one step of optimization"""
         if len(self.memory) < self.batch_size:
             return 0.0  # Not enough samples yet
         
         # Sample a batch of experiences
-        experiences = self.memory.sample(self.batch_size)
+        experiences, indices, weights = self.memory.sample(self.batch_size)
         batch = Experience(*zip(*experiences))
+        weights = torch.FloatTensor(weights).to(self.device)
         
         # Convert to tensors
         state_batch = torch.FloatTensor(np.array(batch.state)).to(self.device)
@@ -121,25 +157,30 @@ class DQNAgent:
         # Compute current Q values
         current_q_values = self.policy_net(state_batch).gather(1, action_batch)
         
-        # Compute target Q values
+        # Compute next Q values using Double DQN
         with torch.no_grad():
-            max_next_q_values = self.target_net(next_state_batch).max(1)[0]
+            # Get actions from policy network
+            next_actions = self.policy_net(next_state_batch).max(1)[1].unsqueeze(1)
+            # Get Q-values from target network for those actions
+            next_q_values = self.target_net(next_state_batch).gather(1, next_actions)
+            # Compute expected Q values
+            expected_q_values = reward_batch.unsqueeze(1) + (1 - done_batch.unsqueeze(1)) * self.gamma * next_q_values
         
-        # Compute the expected Q values
-        expected_q_values = reward_batch + (1 - done_batch) * self.gamma * max_next_q_values
+        # Compute loss with importance sampling weights
+        loss = (weights.unsqueeze(1) * F.smooth_l1_loss(current_q_values, expected_q_values, reduction='none')).mean()
         
-        # Compute loss
-        loss = F.smooth_l1_loss(current_q_values, expected_q_values.unsqueeze(1))
+        # Update priorities in replay memory
+        td_errors = np.abs((expected_q_values - current_q_values).detach().cpu().numpy())
+        self.memory.update_priorities(indices, td_errors.flatten())
         
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
-        # Clip gradients to prevent exploding gradients
-        for param in self.policy_net.parameters():
-            param.grad.data.clamp_(-1, 1)
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), 1)  # More stable gradient clipping
         self.optimizer.step()
         
         return loss.item()
+    
     
     def update_target_network(self):
         """Update the target network with the policy network's weights"""
@@ -166,3 +207,70 @@ class DQNAgent:
         self.steps_done = checkpoint['steps_done']
         self.epsilon = checkpoint['epsilon']
         print(f"Model loaded from {os.path.join(path, 'dqn_agent.pth')}")
+
+class PrioritizedReplayMemory:
+    def __init__(self, capacity, alpha=0.6, beta=0.4, beta_increment=0.001):
+        self.capacity = capacity
+        self.alpha = alpha  # How much prioritization to use (0 = no prioritization)
+        self.beta = beta    # Correction factor (1 = full correction)
+        self.beta_increment = beta_increment  # Beta annealing
+        self.eps = 1e-6     # Small positive constant to avoid zero priority
+        
+        self.memory = []
+        self.priorities = np.zeros((capacity,), dtype=np.float32)
+        self.position = 0
+        self.size = 0
+    
+    def push(self, *args, priority=None):
+        """Save an experience with priority"""
+        if len(self.memory) < self.capacity:
+            self.memory.append(Experience(*args))
+        else:
+            self.memory[self.position] = Experience(*args)
+        
+        # New experiences get max priority
+        if priority is None:
+            priority = self.priorities.max() if self.size > 0 else 1.0
+        
+        # Update priority
+        if self.position >= len(self.priorities):
+            self.priorities = np.append(self.priorities, priority)
+        else:
+            self.priorities[self.position] = priority
+        
+        # Update position and size
+        self.position = (self.position + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
+    
+    def sample(self, batch_size):
+        """Sample a batch of experiences with importance sampling"""
+        if self.size < batch_size:
+            # Not enough samples, return what we have
+            indices = np.arange(self.size)
+        else:
+            # Calculate sampling probabilities
+            probs = self.priorities[:self.size] ** self.alpha
+            probs /= probs.sum()
+            
+            # Sample indices based on probabilities
+            indices = np.random.choice(self.size, batch_size, p=probs)
+        
+        # Calculate importance sampling weights
+        weights = (self.size * probs[indices]) ** (-self.beta)
+        weights /= weights.max()  # Normalize weights
+        
+        # Increment beta for annealing
+        self.beta = min(1.0, self.beta + self.beta_increment)
+        
+        # Get experiences
+        experiences = [self.memory[idx] for idx in indices]
+        
+        return experiences, indices, weights
+    
+    def update_priorities(self, indices, priorities):
+        """Update priorities for sampled experiences"""
+        for idx, priority in zip(indices, priorities):
+            self.priorities[idx] = priority + self.eps
+    
+    def __len__(self):
+        return self.size

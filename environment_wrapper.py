@@ -139,43 +139,56 @@ class MazeEnvironmentWrapper:
         return abs(agent_x - coin_x) + abs(agent_y - coin_y)
     
     def _shape_reward(self, original_reward, done, info):
-        """
-        Shape the reward to provide more feedback to the agent
-        - Reward for collecting the coin (from config)
-        - Penalty for breaking vases (if configured)
-        - Small penalty for each step
-        - Reward/penalty based on getting closer to or further from the coin
-        - Bonus for getting close to the coin
-        """
         # Apply coin collection reward from config if coin was collected
         if info.get('coin_collected', False):
             reward = DQN_CONFIG['COIN_REWARD']
         else:
             reward = original_reward
-        
+
         # Apply vase breaking penalty
         if info.get('vase_broken', False):
             reward += DQN_CONFIG['VASE_PENALTY']
-        
+
         # Apply step penalty to encourage efficient paths
         reward += DQN_CONFIG['STEP_PENALTY']
-        
+
+        # Check if agent hit a wall (didn't move)
+        if hasattr(self, 'last_pos') and self.last_pos == self.env.agent_pos:
+            reward -= 0.2  # Penalty for hitting walls
+
+        # Track visited positions for curiosity-driven exploration
+        pos_tuple = tuple(self.env.agent_pos)
+        if not hasattr(self, 'visited_positions'):
+            self.visited_positions = {}
+
+        # Give reward for visiting new positions or reduced reward for revisiting
+        if pos_tuple not in self.visited_positions:
+            reward += 0.1  # Small reward for exploration
+            self.visited_positions[pos_tuple] = 1
+        else:
+            self.visited_positions[pos_tuple] += 1
+            # Diminishing returns for revisiting same position
+            reward -= 0.05 * min(self.visited_positions[pos_tuple], 5)
+
         # Apply distance-based reward shaping
         if DQN_CONFIG['USE_DISTANCE_REWARD']:
             current_distance = self._get_manhattan_distance()
             distance_delta = self.prev_distance - current_distance
-            
-            # MUCH stronger reward for getting closer to the coin
-            reward += distance_delta * DQN_CONFIG['DISTANCE_REWARD_FACTOR'] * 2
-            
-            # Continuous proximity reward (stronger the closer you get)
+
+            # Stronger reward for getting closer to the coin
+            reward += distance_delta * DQN_CONFIG['DISTANCE_REWARD_FACTOR'] * 4
+
+            # Proximity bonus (gets stronger as distance decreases)
             if current_distance < 10:
-                proximity_reward = (10 - current_distance) * 0.5  # Scales from 0 to 5
-                reward += proximity_reward
-            
+                proximity_bonus = (10 - current_distance) * 0.1
+                reward += proximity_bonus
+
             # Update previous distance
             self.prev_distance = current_distance
-        
+
+        # Update last position
+        self.last_pos = tuple(self.env.agent_pos)
+
         return reward
     
     def render(self):

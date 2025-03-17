@@ -61,6 +61,9 @@ def train():
     vases_broken_list = []
     steps_taken_list = []
     epsilon_values = []
+    coins_window = 0  # Track coins over printing interval
+    last_print_episode = 0  # Track when we last printed
+    steps_window = []  # Track steps for averaging
     
     # Training loop
     for episode in range(1, DQN_CONFIG['EPISODES'] + 1):
@@ -68,6 +71,7 @@ def train():
         score = 0
         steps = 0
         vases_broken = 0
+        episode_coins = 0  # Coins for this episode
         start_time = time.time()
         
         while True:
@@ -91,8 +95,12 @@ def train():
             
             if info.get('vase_broken', False):
                 vases_broken += 1
+            if info.get('coin_collected', False):
+                episode_coins += 1
+                coins_window += 1
             
             if done:
+                steps_window.append(steps)  # Add episode steps to window
                 break
         
         # Update the target network
@@ -108,14 +116,20 @@ def train():
         
         # Print progress
         if episode % DQN_CONFIG['PRINT_FREQ'] == 0:
+            avg_steps = np.mean(steps_window)  # Calculate average steps
             elapsed = time.time() - start_time
             print(f"Episode {episode}/{DQN_CONFIG['EPISODES']} | "
                   f"Score: {score:.2f} | "
                   f"Avg Score: {np.mean(scores_window):.2f} | "
                   f"Epsilon: {agent.epsilon:.2f} | "
-                  f"Steps: {steps} | "
+                  f"Avg Steps (last {DQN_CONFIG['PRINT_FREQ']} eps): {avg_steps:.1f} | "
+                  f"Coins (last {DQN_CONFIG['PRINT_FREQ']} eps): {coins_window} | "
                   f"Vases Broken: {vases_broken} | "
-                  f"Time: {elapsed:.2f}s")
+                  f"Time: {elapsed:.2f}s | "
+                  f"Loss: {loss:.4f}")
+            coins_window = 0  # Reset the window counter after printing
+            steps_window = []  # Reset steps window after printing
+            last_print_episode = episode
         
         # Save the model periodically
         if episode % DQN_CONFIG['SAVE_FREQ'] == 0:

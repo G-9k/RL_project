@@ -365,8 +365,8 @@ class MazeWithVasesEnv(MiniGridEnv):
                 info['num_broken_vases'] = len(self.broken_vases)
                 # Remove the vase from the grid to allow movement through it
                 self.grid.set(x, y, None)
-                if DEBUG_MODE:
-                    print(f"Vase broken at {(x, y)}!")
+                # if DEBUG_MODE:
+                #     print(f"Vase broken at {(x, y)}!")
         
         # Check if coin was collected
         if self.agent_pos == self.coin_pos:
