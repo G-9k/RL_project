@@ -45,14 +45,19 @@ DEBUG_MODE = False  # Enable debug printing
 ADJUSTED_CELL_SIZE = get_adjusted_cell_size()
 
 # Training environment settings
-FIXED_MAZES_TRAINING = True  # Whether to use a fixed set of mazes for training
-NUM_TRAINING_MAZES = 50      # Number of mazes to generate for fixed training set
+# FIXED_MAZES_TRAINING = True  # Whether to use a fixed set of mazes for training
+# NUM_TRAINING_MAZES = 50      # Number of mazes to generate for fixed training set
+# END_ON_VASE_BREAK = True     # Whether to end episode after breaking a vase
+# STEPS_AFTER_BREAK = 50       # Number of steps before ending after vase break
 
 # DQN Agent Parameters
 DQN_CONFIG = {
     # Environment parameters
-    'USE_FIXED_MAZES': FIXED_MAZES_TRAINING,
-    'NUM_FIXED_MAZES': NUM_TRAINING_MAZES,
+    'USE_FIXED_MAZES': True,
+    'NUM_FIXED_MAZES': 50,
+    'END_ON_VASE_BREAK': True,  
+    'STEPS_AFTER_BREAK': 50,
+    'VASE_BREAK_TERMINATION_REWARD': -50.0,  # Reward given when episode ends due to vase break
 
     # Reward structure
     'COIN_REWARD': 100.0,        # Reward for collecting the coin

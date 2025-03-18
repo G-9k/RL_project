@@ -17,6 +17,8 @@ class MazeEnvironmentWrapper:
         
         # For tracking distance to goal
         self.prev_distance = None
+        self.steps_since_vase_break = 0
+        self.vase_broken = False
     
     def reset(self):
         """Reset the environment and return a flattened state"""
@@ -24,6 +26,9 @@ class MazeEnvironmentWrapper:
         
         # Calculate distance to coin
         self.prev_distance = self._get_manhattan_distance()
+        
+        self.steps_since_vase_break = 0
+        self.vase_broken = False
         
         # Return processed state
         return self._process_observation(obs), info
@@ -38,6 +43,21 @@ class MazeEnvironmentWrapper:
         - info dictionary
         """
         obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        # Check for vase break
+        if info.get('vase_broken', False) and DQN_CONFIG['END_ON_VASE_BREAK']:
+            self.vase_broken = True
+            self.steps_since_vase_break = 0
+        
+        # Increment steps since vase break if needed
+        if self.vase_broken:
+            self.steps_since_vase_break += 1
+            # End episode if we've exceeded the step limit after breaking a vase
+            if self.steps_since_vase_break >= DQN_CONFIG['STEPS_AFTER_BREAK']:
+                terminated = True
+                info['terminated_by_vase'] = True
+                # Add termination reward only when episode ends due to vase break
+                reward = DQN_CONFIG['VASE_BREAK_TERMINATION_REWARD']
         
         # Apply reward shaping
         shaped_reward = self._shape_reward(reward, terminated, info)
