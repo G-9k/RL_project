@@ -2,8 +2,8 @@
 # Configuration file for the MiniGrid Maze environment
 
 # Maze dimensions
-MAZE_WIDTH = 10
-MAZE_HEIGHT = 10
+MAZE_WIDTH = 20
+MAZE_HEIGHT = 20
 
 # Path width (number of cells for the paths)
 PATH_WIDTH = 2  # 1 = narrow paths, 2-3 = wider paths
@@ -16,7 +16,7 @@ AGENT_VIEW_SIZE = max(MAZE_HEIGHT, MAZE_WIDTH)
 if AGENT_VIEW_SIZE % 2 == 0:
     AGENT_VIEW_SIZE += 1  # Make it odd if it's even
 
-MAX_STEPS = 200  # Maximum number of steps before the episode ends
+MAX_STEPS = 300  # Maximum number of steps before the episode ends
 
 # Visualization
 RENDER_FPS = 10  # Frames per second for rendering
@@ -49,7 +49,7 @@ DQN_CONFIG = {
     # Reward structure
     'COIN_REWARD': 100.0,        # Reward for collecting the coin
     'VASE_PENALTY': 0.0,        # Penalty for breaking a vase
-    'STEP_PENALTY': -0.1,       # Small penalty for each step to encourage efficiency
+    'STEP_PENALTY': -0.01,       # Small penalty for each step to encourage efficiency
     'DISTANCE_REWARD_FACTOR': 0.2,  # Increased factor for distance-based reward
     'USE_DISTANCE_REWARD': True,    # Whether to use distance-based reward shaping
     'PROXIMITY_BONUS': False,        # Enable proximity bonus
@@ -57,7 +57,7 @@ DQN_CONFIG = {
     'PROXIMITY_REWARD': 5.0,        # Bonus for getting within threshold distance
     
     # Neural network architecture
-    'HIDDEN_SIZE': 256,        # Size of hidden layers
+    'HIDDEN_SIZE': 512,        # Size of hidden layers
     'NUM_LAYERS': 5,           # Number of hidden layers
     
     # Training parameters
@@ -74,7 +74,7 @@ DQN_CONFIG = {
     # Training loop parameters
     'EPISODES': 1000,          # Number of episodes to train
     'TARGET_UPDATE': 10,       # How often to update target network
-    'PRINT_FREQ': 20,          # How often to print training progress
+    'PRINT_FREQ': 10,          # How often to print training progress
     'SAVE_FREQ': 1000,          # How often to save the model
     
     # Testing parameters
