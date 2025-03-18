@@ -54,10 +54,10 @@ ADJUSTED_CELL_SIZE = get_adjusted_cell_size()
 DQN_CONFIG = {
     # Environment parameters
     'USE_FIXED_MAZES': True,
-    'NUM_FIXED_MAZES': 50,
+    'NUM_FIXED_MAZES': 1,
     'END_ON_VASE_BREAK': True,  
-    'STEPS_AFTER_BREAK': 50,
-    'VASE_BREAK_TERMINATION_REWARD': -50.0,  # Reward given when episode ends due to vase break
+    'STEPS_AFTER_BREAK': 40,
+    'VASE_BREAK_TERMINATION_REWARD': 0,  # Reward given when episode ends due to vase break
 
     # Reward structure
     'COIN_REWARD': 100.0,        # Reward for collecting the coin
@@ -86,7 +86,7 @@ DQN_CONFIG = {
     
     # Training loop parameters
     'EPISODES': 1000,          # Number of episodes to train
-    'TARGET_UPDATE': 50,       # How often to update target network
+    'TARGET_UPDATE': 100,       # How often to update target network
     'PRINT_FREQ': 10,          # How often to print training progress
     'SAVE_FREQ': 1000,          # How often to save the model
     

@@ -10,7 +10,7 @@ import argparse
 from maze_env import MazeWithVasesEnv
 from environment_wrapper import MazeEnvironmentWrapper
 from dqn_agent import DQNAgent
-from config import DQN_CONFIG
+from config import *
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train DQN agent on maze environment')
@@ -38,12 +38,40 @@ def train():
         print(f"Generating {DQN_CONFIG['NUM_FIXED_MAZES']} fixed mazes for training...")
         fixed_mazes = []
         for _ in range(DQN_CONFIG['NUM_FIXED_MAZES']):
-            # Create a new environment for each maze
             temp_env = MazeWithVasesEnv()
             temp_env._gen_grid(temp_env.width, temp_env.height)
-            # Store a deep copy of the grid
             fixed_mazes.append(temp_env.grid.copy())
-        print("Fixed mazes generated!")
+        
+        # Visualize the first maze that will be used for training
+        print("\nDisplaying the training maze for 5 seconds...")
+        env.grid = fixed_mazes[0].copy()
+        env._place_agent_and_coin()
+        env._add_vases()
+        
+        # Initialize pygame and show the maze
+        import pygame
+        pygame.init()
+        screen = pygame.display.set_mode((env.width * ADJUSTED_CELL_SIZE, env.height * ADJUSTED_CELL_SIZE))
+        pygame.display.set_caption("Training Maze")
+        
+        # Get and display the frame
+        img = env.get_frame(mode='rgb_array')
+        if img is not None:
+            surface = pygame.surfarray.make_surface(img.swapaxes(0, 1))
+            screen.blit(surface, (0, 0))
+            pygame.display.flip()
+            
+            # Wait for 5 seconds or until window is closed
+            start_time = time.time()
+            while time.time() - start_time < 5:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        return
+                time.sleep(0.1)
+        
+        pygame.quit()
+        print("Starting training...")
     
     # Set seed if specified
     if args.seed is not None:
@@ -75,6 +103,7 @@ def train():
     steps_taken_list = []
     epsilon_values = []
     coins_window = 0  # Track coins over printing interval
+    vases_window = 0  # Add counter for vases in window
     last_print_episode = 0  # Track when we last printed
     steps_window = []  # Track steps for averaging
     
@@ -116,6 +145,7 @@ def train():
             
             if info.get('vase_broken', False):
                 vases_broken += 1
+                vases_window += 1  # Increment window counter
             if info.get('coin_collected', False):
                 episode_coins += 1
                 coins_window += 1
@@ -145,10 +175,11 @@ def train():
                   f"Epsilon: {agent.epsilon:.2f} | "
                   f"Avg Steps (last {DQN_CONFIG['PRINT_FREQ']} eps): {avg_steps:.1f} | "
                   f"Coins (last {DQN_CONFIG['PRINT_FREQ']} eps): {coins_window} | "
-                  f"Vases Broken: {vases_broken} | "
+                  f"Vases (last {DQN_CONFIG['PRINT_FREQ']} eps): {vases_window} | "  # Add vases window
                   f"Time: {elapsed:.2f}s | "
                   f"Loss: {loss:.4f}")
             coins_window = 0  # Reset the window counter after printing
+            vases_window = 0  # Reset vases window counter
             steps_window = []  # Reset steps window after printing
             last_print_episode = episode
         
