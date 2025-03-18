@@ -44,13 +44,21 @@ DEBUG_MODE = False  # Enable debug printing
 # Use this to get the proper cell size when initializing visualization
 ADJUSTED_CELL_SIZE = get_adjusted_cell_size()
 
+# Training environment settings
+FIXED_MAZES_TRAINING = True  # Whether to use a fixed set of mazes for training
+NUM_TRAINING_MAZES = 50      # Number of mazes to generate for fixed training set
+
 # DQN Agent Parameters
 DQN_CONFIG = {
+    # Environment parameters
+    'USE_FIXED_MAZES': FIXED_MAZES_TRAINING,
+    'NUM_FIXED_MAZES': NUM_TRAINING_MAZES,
+
     # Reward structure
     'COIN_REWARD': 100.0,        # Reward for collecting the coin
     'VASE_PENALTY': 0.0,        # Penalty for breaking a vase
-    'STEP_PENALTY': -0.01,       # Small penalty for each step to encourage efficiency
-    'DISTANCE_REWARD_FACTOR': 0.2,  # Increased factor for distance-based reward
+    'STEP_PENALTY': -0.001,       # Small penalty for each step to encourage efficiency
+    'DISTANCE_REWARD_FACTOR': 1.0,  # Increased factor for distance-based reward
     'USE_DISTANCE_REWARD': True,    # Whether to use distance-based reward shaping
     'PROXIMITY_BONUS': False,        # Enable proximity bonus
     'PROXIMITY_THRESHOLD': 5,       # Distance threshold for proximity bonus
@@ -58,22 +66,22 @@ DQN_CONFIG = {
     
     # Neural network architecture
     'HIDDEN_SIZE': 512,        # Size of hidden layers
-    'NUM_LAYERS': 5,           # Number of hidden layers
+    'NUM_LAYERS': 4,           # Number of hidden layers
     
     # Training parameters
-    'LEARNING_RATE': 0.001,    # Learning rate for optimizer
-    'BATCH_SIZE': 256,          # Batch size for training
-    'MEMORY_SIZE': 10000,      # Replay memory size
+    'LEARNING_RATE': 0.0003,    # Learning rate for optimizer
+    'BATCH_SIZE': 512,          # Batch size for training
+    'MEMORY_SIZE': 50000,      # Replay memory size
     'GAMMA': 0.99,             # Discount factor
     
     # Exploration parameters
     'EPSILON_START': 1.0,      # Starting epsilon (exploration rate)
-    'EPSILON_END': 0.1,        # Minimum epsilon
-    'EPSILON_DECAY': 50000,     # Decay rate for epsilon
+    'EPSILON_END': 0.01,        # Minimum epsilon
+    'EPSILON_DECAY': 100000,     # Decay rate for epsilon
     
     # Training loop parameters
     'EPISODES': 1000,          # Number of episodes to train
-    'TARGET_UPDATE': 10,       # How often to update target network
+    'TARGET_UPDATE': 50,       # How often to update target network
     'PRINT_FREQ': 10,          # How often to print training progress
     'SAVE_FREQ': 1000,          # How often to save the model
     

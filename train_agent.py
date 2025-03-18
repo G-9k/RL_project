@@ -32,6 +32,19 @@ def train():
     env = MazeWithVasesEnv()
     env_wrapper = MazeEnvironmentWrapper(env)
     
+    # Generate fixed mazes if enabled
+    fixed_mazes = None
+    if DQN_CONFIG['USE_FIXED_MAZES']:
+        print(f"Generating {DQN_CONFIG['NUM_FIXED_MAZES']} fixed mazes for training...")
+        fixed_mazes = []
+        for _ in range(DQN_CONFIG['NUM_FIXED_MAZES']):
+            # Create a new environment for each maze
+            temp_env = MazeWithVasesEnv()
+            temp_env._gen_grid(temp_env.width, temp_env.height)
+            # Store a deep copy of the grid
+            fixed_mazes.append(temp_env.grid.copy())
+        print("Fixed mazes generated!")
+    
     # Set seed if specified
     if args.seed is not None:
         torch.manual_seed(args.seed)
@@ -67,6 +80,14 @@ def train():
     
     # Training loop
     for episode in range(1, DQN_CONFIG['EPISODES'] + 1):
+        # If using fixed mazes, select one randomly
+        if DQN_CONFIG['USE_FIXED_MAZES']:
+            maze_idx = np.random.randint(0, DQN_CONFIG['NUM_FIXED_MAZES'])
+            env.grid = fixed_mazes[maze_idx].copy()
+            # Reset agent and goal positions
+            env._place_agent_and_coin()
+            env._add_vases()
+        
         state, _ = env_wrapper.reset()
         score = 0
         steps = 0
@@ -140,25 +161,42 @@ def train():
             
             # Plot scores
             plt.subplot(2, 2, 1)
-            plt.plot(scores)
-            plt.plot(np.convolve(scores, np.ones(100)/100, mode='valid'))
+            plt.plot(scores, 'b-', alpha=0.6, label='Score')
+            plt.plot(np.convolve(scores, np.ones(100)/100, mode='valid'), 
+                     'r-', label='100-episode average')
             plt.title('Score')
             plt.xlabel('Episode')
             plt.ylabel('Score')
-            
-            # Plot epsilon decay
-            plt.subplot(2, 2, 2)
-            plt.plot(epsilon_values)
-            plt.title('Epsilon Decay')
-            plt.xlabel('Episode')
-            plt.ylabel('Epsilon')
+            plt.legend()
             
             # Plot steps per episode
-            plt.subplot(2, 2, 3)
-            plt.plot(steps_taken_list)
+            plt.subplot(2, 2, 2)
+            plt.plot(steps_taken_list, 'b-', alpha=0.6, label='Steps')
+            plt.plot(np.convolve(steps_taken_list, np.ones(100)/100, mode='valid'),
+                     'orange', label='100-episode average')
             plt.title('Steps per Episode')
             plt.xlabel('Episode')
             plt.ylabel('Steps')
+            plt.legend()
+            
+            # Plot coins collected per PRINT_FREQ episodes
+            plt.subplot(2, 2, 3)
+            coins_per_window = []
+            for i in range(0, len(scores), DQN_CONFIG['PRINT_FREQ']):
+                window_end = min(i + DQN_CONFIG['PRINT_FREQ'], len(scores))
+                coins_in_window = sum(1 for j in range(i, window_end) 
+                                    if scores[j] >= DQN_CONFIG['COIN_REWARD'])
+                coins_per_window.append(coins_in_window)
+            
+            window_indices = np.arange(len(coins_per_window)) * DQN_CONFIG['PRINT_FREQ']
+            plt.plot(window_indices, coins_per_window, 'b-', alpha=0.6, label='Coins')
+            plt.plot(window_indices, 
+                     np.convolve(coins_per_window, np.ones(10)/10, mode='same'),
+                     'orange', label='Moving average')
+            plt.title(f'Coins Collected per {DQN_CONFIG["PRINT_FREQ"]} Episodes')
+            plt.xlabel('Episode')
+            plt.ylabel('Coins Collected')
+            plt.legend()
             
             # Plot vases broken
             plt.subplot(2, 2, 4)
