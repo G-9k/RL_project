@@ -103,19 +103,29 @@ CURRICULUM = {
     'PHASES': [
         {
             'NAME': 'navigation',
-            'OUTPUT_NAME': 'dqn_base_navigation',  # Base navigation skills
+            'OUTPUT_NAME': 'dqn_base_navigation',
             'NUM_VASES': 0,
             'EPISODES': 500,
             'END_ON_VASE_BREAK': False,
-            'LEARNING_RATE': 0.0003
+            'LEARNING_RATE': 0.0003,
+            # Add fixed maze parameters
+            'USE_FIXED_MAZES': True,
+            'NUM_FIXED_MAZES': 1,
+            'FIXED_OBJECT_POSITIONS': True,
+            'FIXED_AGENT_START': True
         },
         {
             'NAME': 'vase_awareness',
-            'OUTPUT_NAME': 'dqn_vase_aware',  # Vase avoidance trained
+            'OUTPUT_NAME': 'dqn_vase_aware',
             'NUM_VASES': 5,
             'EPISODES': 1000,
             'END_ON_VASE_BREAK': True,
-            'LEARNING_RATE': 0.0001
+            'LEARNING_RATE': 0.0001,
+            # Add fixed maze parameters
+            'USE_FIXED_MAZES': True,
+            'NUM_FIXED_MAZES': 1,
+            'FIXED_OBJECT_POSITIONS': True,
+            'FIXED_AGENT_START': True
         }
     ]
 }
