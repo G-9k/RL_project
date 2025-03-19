@@ -1,7 +1,7 @@
 # environment_wrapper.py
 import numpy as np
 import gymnasium as gym
-from maze_env import MazeWithVasesEnv
+from maze_env import MazeWithVasesEnv, Vase
 from config import *
 
 class MazeEnvironmentWrapper:
@@ -21,16 +21,23 @@ class MazeEnvironmentWrapper:
         self.vase_broken = False
     
     def reset(self):
-        """Reset the environment and return a flattened state"""
+        """Reset the environment and remove vases if needed"""
         obs, info = self.env.reset()
         
-        # Calculate distance to coin
+        if DQN_CONFIG['NUM_VASES'] == 0:
+            # Properly iterate through grid to remove vases
+            for i in range(self.env.grid.height):
+                for j in range(self.env.grid.width):
+                    cell = self.env.grid.get(i, j)
+                    if isinstance(cell, Vase):
+                        self.env.grid.set(i, j, None)
+        
+        self.last_pos = tuple(self.env.agent_pos)
         self.prev_distance = self._get_manhattan_distance()
-        
-        self.steps_since_vase_break = 0
+        self.visited_positions = {}
         self.vase_broken = False
+        self.steps_since_vase_break = 0
         
-        # Return processed state
         return self._process_observation(obs), info
     
     def step(self, action):

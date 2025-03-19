@@ -85,7 +85,7 @@ DQN_CONFIG = {
     # Exploration parameters
     'EPSILON_START': 1.0,      # Starting epsilon (exploration rate)
     'EPSILON_END': 0.02,        # Minimum epsilon
-    'EXPLORATION_FRACTION': 0.1,  # Fraction of training duration over which to anneal epsilon
+    'EPSILON_DECAY': 100000,  # Fraction of training duration over which to anneal epsilon
     
     # Training loop parameters
     'EPISODES': 1500,          # Number of episodes to train

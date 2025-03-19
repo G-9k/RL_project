@@ -21,107 +21,44 @@ def parse_arguments():
     parser.add_argument('--seed', type=int, default=None, help='Random seed')
     return parser.parse_args()
 
-def train():
-    args = parse_arguments()
+def train(args=None, env_wrapper=None):
+    """Train the agent"""
+    if args is None:
+        args = parse_arguments()
     
+    # Get environment from wrapper or create new one
+    if env_wrapper is None:
+        env = MazeWithVasesEnv()
+        env_wrapper = MazeEnvironmentWrapper(env)
+    else:
+        env = env_wrapper.env  # Extract environment from wrapper
+    
+    # Handle fixed mazes
+    if DQN_CONFIG['USE_FIXED_MAZES']:
+        fixed_mazes = []
+        fixed_positions = []
+        
+        # Generate fixed mazes
+        for _ in range(DQN_CONFIG['NUM_FIXED_MAZES']):
+            env.reset()
+            fixed_mazes.append(env.grid.copy())
+            if DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
+                fixed_positions.append({
+                    'agent_pos': tuple(env.agent_pos),  # Store as new tuple
+                    'agent_dir': env.agent_dir,
+                    'coin_pos': tuple(env.coin_pos)     # Store as new tuple
+                })
+        
+        # Set initial maze
+        env.grid = fixed_mazes[0].copy()
+        if DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
+            env.agent_pos = fixed_positions[0]['agent_pos']  # Use tuple directly
+            env.agent_dir = fixed_positions[0]['agent_dir']
+            env.coin_pos = fixed_positions[0]['coin_pos']    # Use tuple directly
+
     # Override episodes if specified
     if args.episodes is not None:
         DQN_CONFIG['EPISODES'] = args.episodes
-    
-    # Create environment
-    env = MazeWithVasesEnv()
-    env_wrapper = MazeEnvironmentWrapper(env)
-    
-    # Generate fixed mazes if enabled
-    fixed_mazes = None
-    fixed_coin_pos = None
-    fixed_vases_pos = None
-
-    if DQN_CONFIG['USE_FIXED_MAZES']:
-        print(f"Generating {DQN_CONFIG['NUM_FIXED_MAZES']} fixed mazes for training...")
-        fixed_mazes = []
-        
-        # Generate first maze and store object positions if needed
-        temp_env = MazeWithVasesEnv()
-        temp_env._gen_grid(temp_env.width, temp_env.height)
-        temp_env._place_agent_and_coin()
-        temp_env._add_vases()
-        
-        if DQN_CONFIG['NUM_FIXED_MAZES'] == 1 and DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
-            fixed_coin_pos = temp_env.coin_pos
-            fixed_vases_pos = temp_env.vases.copy()
-            print("Using fixed positions for coin and vases")
-        
-        fixed_mazes.append(temp_env.grid.copy())
-        
-        # Visualize the first maze that will be used for training
-        print("\nDisplaying the training maze for 5 seconds...")
-        env.grid = fixed_mazes[0].copy()
-        
-        # Clear the grid of all objects (including those copied from fixed_mazes)
-        for i in range(env.width):
-            for j in range(env.height):
-                cell = env.grid.get(i, j)
-                if cell and not isinstance(cell, Wall):
-                    env.grid.set(i, j, None)
-        
-        # Clear all object trackers
-        env.vases = []
-        env.coin_pos = None
-        env.agent_pos = None
-        env.agent_dir = None
-        
-        if DQN_CONFIG['NUM_FIXED_MAZES'] == 1 and DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
-            # Use stored positions
-            env.coin_pos = fixed_coin_pos
-            env.agent_pos = temp_env.agent_pos
-            env.agent_dir = temp_env.agent_dir
-            
-            # Place coin in grid
-            coin = temp_env.grid.get(*fixed_coin_pos)
-            env.grid.set(*fixed_coin_pos, coin)
-            
-            # Place vases in grid
-            for vase_pos in fixed_vases_pos:
-                vase = Vase()
-                env.grid.set(vase_pos[0], vase_pos[1], vase)
-                env.vases.append(vase_pos)
-        else:
-            # Random positions
-            env._place_agent_and_coin()
-            env._add_vases()
-        
-        # Place agent before rendering
-        if fixed_coin_pos:
-            env.agent_pos = temp_env.agent_pos  # Use the stored agent position
-            env.agent_dir = temp_env.agent_dir  # Use the stored agent direction
-        else:
-            env._place_agent_and_coin()  # This will place both agent and coin
-        
-        # Initialize pygame and show the maze
-        import pygame
-        pygame.init()
-        screen = pygame.display.set_mode((env.width * ADJUSTED_CELL_SIZE, env.height * ADJUSTED_CELL_SIZE))
-        pygame.display.set_caption("Training Maze")
-        
-        # Get and display the frame
-        img = env.get_frame(mode='rgb_array')
-        if img is not None:
-            surface = pygame.surfarray.make_surface(img.swapaxes(0, 1))
-            screen.blit(surface, (0, 0))
-            pygame.display.flip()
-            
-            # Wait for 5 seconds or until window is closed
-            start_time = time.time()
-            while time.time() - start_time < 10:
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit()
-                        return
-                time.sleep(0.1)
-        
-        pygame.quit()
-        print("Starting training...")
     
     # Set seed if specified
     if args.seed is not None:
@@ -168,19 +105,9 @@ def train():
                 if DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
                     # Use stored positions for vases and coin
                     env.vases = []
-                    env.coin_pos = fixed_coin_pos
-                    for vase_pos in fixed_vases_pos:
-                        vase = Vase()
-                        env.grid.set(vase_pos[0], vase_pos[1], vase)
-                        env.vases.append(vase_pos)
-                
-                if DQN_CONFIG['FIXED_AGENT_START']:
-                    # Use stored agent position and direction
-                    env.agent_pos = temp_env.agent_pos
-                    env.agent_dir = temp_env.agent_dir
-                else:
-                    # Random agent position
-                    env._place_agent_and_coin()
+                    env.coin_pos = fixed_positions[maze_idx]['coin_pos']
+                    env.agent_pos = fixed_positions[maze_idx]['agent_pos']
+                    env.agent_dir = fixed_positions[maze_idx]['agent_dir']
         
         state, _ = env_wrapper.reset()
         score = 0
