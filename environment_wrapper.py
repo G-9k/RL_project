@@ -34,36 +34,37 @@ class MazeEnvironmentWrapper:
         return self._process_observation(obs), info
     
     def step(self, action):
-        """
-        Take a step in the environment and return:
-        - processed observation
-        - shaped reward
-        - done flag
-        - truncated flag
-        - info dictionary
-        """
+        """Take a step in the environment"""
+        # Get initial step result
         obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        # Store true final observation before any resets
+        if terminated or truncated:
+            info['final_observation'] = self._process_observation(obs)
         
         # Check for vase break
         if info.get('vase_broken', False) and DQN_CONFIG['END_ON_VASE_BREAK']:
             self.vase_broken = True
             self.steps_since_vase_break = 0
         
-        # Increment steps since vase break if needed
+        # Handle vase break termination
         if self.vase_broken:
             self.steps_since_vase_break += 1
-            # End episode if we've exceeded the step limit after breaking a vase
             if self.steps_since_vase_break >= DQN_CONFIG['STEPS_AFTER_BREAK']:
-                terminated = True
+                terminated = True  # Natural termination
                 info['terminated_by_vase'] = True
-                # Add termination reward only when episode ends due to vase break
+                # Store final observation before applying termination reward
+                if 'final_observation' not in info:
+                    info['final_observation'] = self._process_observation(obs)
                 reward = DQN_CONFIG['VASE_BREAK_TERMINATION_REWARD']
         
-        # Apply reward shaping
+        # Shape reward
         shaped_reward = self._shape_reward(reward, terminated, info)
         
-        # Return processed state and shaped reward
-        return self._process_observation(obs), shaped_reward, terminated, truncated, info
+        # Process observation
+        processed_obs = self._process_observation(obs)
+        
+        return processed_obs, shaped_reward, terminated, truncated, info
     
     def _process_observation(self, obs):
         """

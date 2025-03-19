@@ -1,0 +1,327 @@
+import os
+import sys
+import time
+import warnings
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, TypeAlias
+
+import gymnasium as gym
+import numpy as np
+import torch as t
+import wandb
+from gymnasium.spaces import Box, Discrete
+from jaxtyping import Bool, Float, Int
+from torch import Tensor, nn
+from tqdm import tqdm, trange
+from config import *
+
+device: t.device = t.device("cuda" if t.cuda.is_available() else "cpu")
+
+class QNetwork(nn.Module):
+    """For consistency with your tests, please wrap your modules in a `nn.Sequential` called `layers`."""
+
+    layers: nn.Sequential
+
+    def __init__(self, state_size: int, action_size: int, hidden_size: int = DQN_CONFIG["HIDDEN_SIZE"], num_layers: int = DQN_CONFIG["NUM_LAYERS"]):
+        super().__init__()
+        self.state_size = state_size
+        self.action_size = action_size
+
+        layers = []
+
+        layers.append(nn.Linear(state_size, hidden_size))
+        layers.append(nn.ReLU())
+
+        for _ in range(num_layers-3):
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(nn.ReLU())
+
+        layers.append(nn.Linear(hidden_size, hidden_size // 2))
+        layers.append(nn.ReLU())
+        layers.append(nn.Linear(hidden_size // 2, action_size))
+        
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x: t.Tensor) -> t.Tensor:
+        return self.layers(x)
+    
+@dataclass
+class ReplayBufferSamples:
+    obs: t.Tensor
+    actions: t.Tensor
+    rewards: t.Tensor
+    terminated: t.Tensor
+    next_obs: t.Tensor
+
+
+class ReplayBuffer:
+    """
+    Contains buffer; has a method to sample from it to return a ReplayBufferSamples object.
+    """
+
+    # rng: np.random.Generator
+    # obs: Float[Arr, "buffer_size *obs_shape"]
+    # actions: Float[Arr, "buffer_size *action_shape"]
+    # rewards: Float[Arr, "buffer_size"]
+    # terminated: Bool[Arr, "buffer_size"]
+    # next_obs: Float[Arr, "buffer_size *obs_shape"]
+
+    def __init__(self, obs_shape: tuple[int], action_shape: tuple[int], buffer_size: int, seed: int):
+        self.obs_shape = obs_shape
+        self.action_shape = action_shape
+        self.buffer_size = buffer_size
+        self.rng = np.random.default_rng(seed)
+
+        self.obs = np.empty((0, *self.obs_shape), dtype=np.float32)
+        self.actions = np.empty((0, *self.action_shape), dtype=np.int32)
+        self.rewards = np.empty(0, dtype=np.float32)
+        self.terminated = np.empty(0, dtype=bool)
+        self.next_obs = np.empty((0, *self.obs_shape), dtype=np.float32)
+
+    def add(self, obs: np.ndarray, action: int, reward: float, terminated: bool, next_obs: np.ndarray) -> None:
+        """Add a single transition to the buffer"""
+        # Reshape inputs for single transition
+        obs = np.array([obs])
+        action = np.array([action])
+        reward = np.array([reward])
+        terminated = np.array([terminated])
+        next_obs = np.array([next_obs])
+
+        # Add to buffer, maintaining size limit
+        self.obs = np.concatenate((self.obs, obs))[-self.buffer_size:]
+        self.actions = np.concatenate((self.actions, action))[-self.buffer_size:]
+        self.rewards = np.concatenate((self.rewards, reward))[-self.buffer_size:]
+        self.terminated = np.concatenate((self.terminated, terminated))[-self.buffer_size:]
+        self.next_obs = np.concatenate((self.next_obs, next_obs))[-self.buffer_size:]
+
+    def sample(self, sample_size: int, device: t.device) -> ReplayBufferSamples:
+        """Sample a batch of transitions"""
+        indices = self.rng.integers(0, len(self.obs), sample_size)
+        
+        return ReplayBufferSamples(
+            *[t.tensor(x[indices], device=device) 
+              for x in [self.obs, self.actions, self.rewards, self.terminated, self.next_obs]]
+        )
+    
+
+def linear_schedule(
+    current_step: int, start_e: float, end_e: float, exploration_fraction: float, total_timesteps: int
+) -> float:
+    """Return the appropriate epsilon for the current step.
+
+    Epsilon should be start_e at step 0 and decrease linearly to end_e at step (exploration_fraction * total_timesteps).
+    In other words, we are in "explore mode" with start_e >= epsilon >= end_e for the first `exploration_fraction` fraction
+    of total timesteps, and then stay at end_e for the rest of the episode.
+    """
+    return start_e + (end_e - start_e) * min(current_step / (exploration_fraction * total_timesteps), 1)
+
+
+def epsilon_greedy_policy(
+    env,
+    q_network: QNetwork,
+    rng: np.random.Generator,
+    obs: np.ndarray,
+    epsilon: float,
+) -> int:
+    """With probability epsilon, take a random action. Otherwise, take a greedy action according to the q_network.
+    Inputs:
+        env:        The environment to run against
+        q_network:  The QNetwork used to approximate the Q-value function
+        obs:        The current observation
+        epsilon:    The probability of taking a random action
+    Outputs:
+        action:    The sampled action for the environment.
+    """
+    # Convert `obs` into a tensor so we can feed it into our model
+    obs = t.from_numpy(obs).to(device)
+
+    num_actions = env.action_space.n
+    if rng.random() < epsilon:
+        return rng.integers(0, num_actions)
+    else:
+        q_scores = q_network(obs)
+        return q_scores.argmax().item()
+    
+
+@dataclass
+class DQNArgs:
+    # Basic / global
+    # seed: int = 1
+    # env_id: str = "CartPole-v1"
+    # num_envs: int = 1
+
+    # # Wandb / logging
+    # use_wandb: bool = False
+    # wandb_project_name: str = "DQNCartPole"
+    # wandb_entity: str | None = None
+    # video_log_freq: int | None = 50
+
+    # Duration of different phases / buffer memory settings
+    total_timesteps: int = DQN_CONFIG["EPISODES"] * MAX_STEPS
+    steps_per_train: int = DQN_CONFIG["STEPS_PER_TRAIN"]
+    trains_per_target_update: int = DQN_CONFIG["TARGET_UPDATE"]
+    buffer_size: int = DQN_CONFIG["MEMORY_SIZE"]
+
+    # Optimization hparams
+    batch_size: int = DQN_CONFIG["BATCH_SIZE"]
+    learning_rate: float = DQN_CONFIG["LEARNING_RATE"]
+
+    # RL-specific
+    gamma: float = DQN_CONFIG["GAMMA"]
+    exploration_fraction: float = DQN_CONFIG["EXPLORATION_FRACTION"]
+    start_e: float = DQN_CONFIG["EPSILON_START"]
+    end_e: float = DQN_CONFIG["EPSILON_END"]
+
+
+def get_episode_data_from_infos(infos: dict) -> dict[str, int | float] | None:
+    """
+    Helper function: returns dict of data from the first terminated environment, if at least one terminated.
+    """
+    for final_info in infos.get("final_info", []):
+        if final_info is not None and "episode" in final_info:
+            return {
+                "episode_length": final_info["episode"]["l"].item(),
+                "episode_reward": final_info["episode"]["r"].item(),
+                "episode_duration": final_info["episode"]["t"].item(),
+            }
+
+class DQNAgent:
+    """Base Agent class handling the interaction with the environment."""
+
+    def __init__(self, env, buffer: ReplayBuffer, q_network: QNetwork, start_e: float, end_e: float, 
+                 exploration_fraction: float, total_timesteps: int, rng: np.random.Generator):
+        self.env = env
+        self.buffer = buffer
+        self.q_network = q_network
+        
+        # Use q_network's dimensions for target network
+        self.target_network = QNetwork(
+            state_size=self.q_network.state_size,
+            action_size=self.q_network.action_size,
+            hidden_size=DQN_CONFIG["HIDDEN_SIZE"],
+            num_layers=DQN_CONFIG["NUM_LAYERS"]
+        ).to(device)
+        
+        # Rest of initialization...
+        
+        self.obs, _ = self.env.reset()
+        
+        # Get sizes and add logging
+        self.state_size = len(self.obs)
+        self.action_size = env.action_space.n
+        print(f"\nNetwork Size Debugging:")
+        print(f"Initial state_size: {self.state_size}")
+        print(f"Initial action_size: {self.action_size}")
+        print(f"Q-Network state_size: {q_network.state_size}")
+        print(f"Q-Network action_size: {q_network.action_size}")
+        
+        # Create target network with logging
+        print(f"\nCreating target network with:")
+        print(f"state_size={self.state_size}, action_size={self.action_size}")
+        
+        print(f"\nNetwork Comparison:")
+        print(f"Q-Network dims: state={self.q_network.state_size}, action={self.q_network.action_size}")
+        print(f"Target Network dims: state={self.target_network.state_size}, action={self.target_network.action_size}")
+        
+        # Verify network dimensions match before loading
+        assert self.q_network.state_size == self.target_network.state_size, "Network state sizes don't match"
+        assert self.q_network.action_size == self.target_network.action_size, "Network action sizes don't match"
+        
+        self.target_network.load_state_dict(self.q_network.state_dict())
+        self.optimizer = t.optim.Adam(self.q_network.parameters(), lr=DQN_CONFIG['LEARNING_RATE'])
+        
+        # Store other parameters
+        self.start_e = start_e
+        self.end_e = end_e
+        self.exploration_fraction = exploration_fraction
+        self.total_timesteps = total_timesteps
+        self.rng = rng
+        self.step = 0
+        self.epsilon = start_e
+
+    def play_step(self) -> dict:
+        """Single interaction step between agent & environment."""
+        self.obs = np.array(self.obs, dtype=np.float32)
+        actions = self.get_actions(self.obs)
+        next_obs, rewards, terminated, truncated, infos = self.env.step(actions[0])
+
+        # Handle terminal states
+        true_next_obs = next_obs.copy()
+        if terminated or truncated:
+            if "final_observation" in infos:
+                true_next_obs = infos["final_observation"]
+
+        self.buffer.add(self.obs, actions[0], rewards, terminated, true_next_obs)
+        self.obs = next_obs
+
+        self.step += 1
+        return infos
+
+    def get_actions(self, obs: np.ndarray) -> np.ndarray:
+        """Samples actions according to the epsilon-greedy policy using linear schedule."""
+        self.epsilon = linear_schedule(
+            self.step, self.start_e, self.end_e, self.exploration_fraction, self.total_timesteps
+        )
+        action = epsilon_greedy_policy(self.env, self.q_network, self.rng, obs, self.epsilon)
+        return np.array([action])  # Return as array for consistency
+
+    def add_to_replay_buffer(self, n: int, verbose: bool = False):
+        """
+        Takes n steps with the agent, adding to the replay buffer (and logging any results). Should return a dict of
+        data from the last terminated episode, if any.
+
+        Optional argument `verbose`: if True, we can use a progress bar (useful to check how long the initial buffer
+        filling is taking).
+        """
+        data = None
+
+        for step in tqdm(range(n), disable=not verbose, desc="Adding to replay buffer"):
+            infos = self.agent.play_step()
+            data = data or get_episode_data_from_infos(infos)
+
+        return data
+
+    def prepopulate_replay_buffer(self):
+        """
+        Called to fill the replay buffer before training starts.
+        """
+        n_steps_to_fill_buffer = self.args.buffer_size // self.args.num_envs
+        self.add_to_replay_buffer(n_steps_to_fill_buffer, verbose=True)
+
+    def training_step(self, step) -> float:
+        """Takes a single training step and returns the loss"""
+        data = self.buffer.sample(DQN_CONFIG['BATCH_SIZE'], device)
+
+        with t.inference_mode():
+            target_max = self.target_network(data.next_obs).max(-1).values
+        predicted_q_vals = self.q_network(data.obs)[range(len(data.actions)), data.actions]
+
+        td_error = data.rewards + DQN_CONFIG['GAMMA'] * target_max * (1 - data.terminated.float()) - predicted_q_vals
+        loss = td_error.pow(2).mean()
+        loss.backward()
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+        if step % self.args.trains_per_target_update == 0:
+            self.target_network.load_state_dict(self.q_network.state_dict())
+
+def save(self, path: str = "models"):
+    """Save the model"""
+    os.makedirs(path, exist_ok=True)
+    t.save({
+        'q_network': self.q_network.state_dict(),
+        'target_network': self.target_network.state_dict(),
+        'optimizer': self.optimizer.state_dict(),
+        'step': self.step,
+        'epsilon': self.epsilon
+    }, os.path.join(path, "dqn_agent.pth"))
+
+def load(self, path: str = "models"):
+        """Load the model"""
+        checkpoint = t.load(os.path.join(path, "dqn_agent.pth"))
+        self.q_network.load_state_dict(checkpoint['q_network'])
+        self.target_network.load_state_dict(checkpoint['target_network'])
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
+        self.step = checkpoint['step']
+        self.epsilon = checkpoint['epsilon']

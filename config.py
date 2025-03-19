@@ -80,11 +80,12 @@ DQN_CONFIG = {
     'BATCH_SIZE': 1024,          # Batch size for training
     'MEMORY_SIZE': 100000,      # Replay memory size
     'GAMMA': 0.995,             # Discount factor
+    'STEPS_PER_TRAIN': 10,       # Number of steps between training updates
     
     # Exploration parameters
     'EPSILON_START': 1.0,      # Starting epsilon (exploration rate)
     'EPSILON_END': 0.02,        # Minimum epsilon
-    'EPSILON_DECAY': 100000,     # Decay rate for epsilon
+    'EXPLORATION_FRACTION': 0.1,  # Fraction of training duration over which to anneal epsilon
     
     # Training loop parameters
     'EPISODES': 1500,          # Number of episodes to train
