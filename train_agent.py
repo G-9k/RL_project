@@ -7,7 +7,7 @@ from collections import deque
 import time
 import argparse
 
-from maze_env import MazeWithVasesEnv
+from maze_env import MazeWithVasesEnv, Vase, Wall
 from environment_wrapper import MazeEnvironmentWrapper
 from dqn_agent import DQNAgent
 from config import *
@@ -34,19 +34,69 @@ def train():
     
     # Generate fixed mazes if enabled
     fixed_mazes = None
+    fixed_coin_pos = None
+    fixed_vases_pos = None
+
     if DQN_CONFIG['USE_FIXED_MAZES']:
         print(f"Generating {DQN_CONFIG['NUM_FIXED_MAZES']} fixed mazes for training...")
         fixed_mazes = []
-        for _ in range(DQN_CONFIG['NUM_FIXED_MAZES']):
-            temp_env = MazeWithVasesEnv()
-            temp_env._gen_grid(temp_env.width, temp_env.height)
-            fixed_mazes.append(temp_env.grid.copy())
+        
+        # Generate first maze and store object positions if needed
+        temp_env = MazeWithVasesEnv()
+        temp_env._gen_grid(temp_env.width, temp_env.height)
+        temp_env._place_agent_and_coin()
+        temp_env._add_vases()
+        
+        if DQN_CONFIG['NUM_FIXED_MAZES'] == 1 and DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
+            fixed_coin_pos = temp_env.coin_pos
+            fixed_vases_pos = temp_env.vases.copy()
+            print("Using fixed positions for coin and vases")
+        
+        fixed_mazes.append(temp_env.grid.copy())
         
         # Visualize the first maze that will be used for training
         print("\nDisplaying the training maze for 5 seconds...")
         env.grid = fixed_mazes[0].copy()
-        env._place_agent_and_coin()
-        env._add_vases()
+        
+        # Clear the grid of all objects (including those copied from fixed_mazes)
+        for i in range(env.width):
+            for j in range(env.height):
+                cell = env.grid.get(i, j)
+                if cell and not isinstance(cell, Wall):
+                    env.grid.set(i, j, None)
+        
+        # Clear all object trackers
+        env.vases = []
+        env.coin_pos = None
+        env.agent_pos = None
+        env.agent_dir = None
+        
+        if DQN_CONFIG['NUM_FIXED_MAZES'] == 1 and DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
+            # Use stored positions
+            env.coin_pos = fixed_coin_pos
+            env.agent_pos = temp_env.agent_pos
+            env.agent_dir = temp_env.agent_dir
+            
+            # Place coin in grid
+            coin = temp_env.grid.get(*fixed_coin_pos)
+            env.grid.set(*fixed_coin_pos, coin)
+            
+            # Place vases in grid
+            for vase_pos in fixed_vases_pos:
+                vase = Vase()
+                env.grid.set(vase_pos[0], vase_pos[1], vase)
+                env.vases.append(vase_pos)
+        else:
+            # Random positions
+            env._place_agent_and_coin()
+            env._add_vases()
+        
+        # Place agent before rendering
+        if fixed_coin_pos:
+            env.agent_pos = temp_env.agent_pos  # Use the stored agent position
+            env.agent_dir = temp_env.agent_dir  # Use the stored agent direction
+        else:
+            env._place_agent_and_coin()  # This will place both agent and coin
         
         # Initialize pygame and show the maze
         import pygame
@@ -63,7 +113,7 @@ def train():
             
             # Wait for 5 seconds or until window is closed
             start_time = time.time()
-            while time.time() - start_time < 5:
+            while time.time() - start_time < 10:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         pygame.quit()
@@ -113,9 +163,24 @@ def train():
         if DQN_CONFIG['USE_FIXED_MAZES']:
             maze_idx = np.random.randint(0, DQN_CONFIG['NUM_FIXED_MAZES'])
             env.grid = fixed_mazes[maze_idx].copy()
-            # Reset agent and goal positions
-            env._place_agent_and_coin()
-            env._add_vases()
+            
+            if DQN_CONFIG['NUM_FIXED_MAZES'] == 1:
+                if DQN_CONFIG['FIXED_OBJECT_POSITIONS']:
+                    # Use stored positions for vases and coin
+                    env.vases = []
+                    env.coin_pos = fixed_coin_pos
+                    for vase_pos in fixed_vases_pos:
+                        vase = Vase()
+                        env.grid.set(vase_pos[0], vase_pos[1], vase)
+                        env.vases.append(vase_pos)
+                
+                if DQN_CONFIG['FIXED_AGENT_START']:
+                    # Use stored agent position and direction
+                    env.agent_pos = temp_env.agent_pos
+                    env.agent_dir = temp_env.agent_dir
+                else:
+                    # Random agent position
+                    env._place_agent_and_coin()
         
         state, _ = env_wrapper.reset()
         score = 0
@@ -194,7 +259,9 @@ def train():
             plt.subplot(2, 2, 1)
             plt.plot(scores, 'b-', alpha=0.6, label='Score')
             plt.plot(np.convolve(scores, np.ones(100)/100, mode='valid'), 
-                     'r-', label='100-episode average')
+                     'r-', label='100-episode running average')
+            plt.axhline(y=np.mean(scores), color='g', linestyle='--', 
+                       label=f'Total average: {np.mean(scores):.2f}')
             plt.title('Score')
             plt.xlabel('Episode')
             plt.ylabel('Score')
@@ -204,7 +271,9 @@ def train():
             plt.subplot(2, 2, 2)
             plt.plot(steps_taken_list, 'b-', alpha=0.6, label='Steps')
             plt.plot(np.convolve(steps_taken_list, np.ones(100)/100, mode='valid'),
-                     'orange', label='100-episode average')
+                     'r-', label='100-episode running average')
+            plt.axhline(y=np.mean(steps_taken_list), color='g', linestyle='--',
+                       label=f'Total average: {np.mean(steps_taken_list):.1f}')
             plt.title('Steps per Episode')
             plt.xlabel('Episode')
             plt.ylabel('Steps')
@@ -223,7 +292,9 @@ def train():
             plt.plot(window_indices, coins_per_window, 'b-', alpha=0.6, label='Coins')
             plt.plot(window_indices, 
                      np.convolve(coins_per_window, np.ones(10)/10, mode='same'),
-                     'orange', label='Moving average')
+                     'r-', label='10-window running average')
+            plt.axhline(y=np.mean(coins_per_window), color='g', linestyle='--',
+                       label=f'Total average: {np.mean(coins_per_window):.2f}')
             plt.title(f'Coins Collected per {DQN_CONFIG["PRINT_FREQ"]} Episodes')
             plt.xlabel('Episode')
             plt.ylabel('Coins Collected')
@@ -231,10 +302,15 @@ def train():
             
             # Plot vases broken
             plt.subplot(2, 2, 4)
-            plt.plot(vases_broken_list)
+            plt.plot(vases_broken_list, 'b-', alpha=0.6, label='Vases broken')
+            plt.plot(np.convolve(vases_broken_list, np.ones(100)/100, mode='valid'),
+                     'r-', label='100-episode running average')
+            plt.axhline(y=np.mean(vases_broken_list), color='g', linestyle='--',
+                       label=f'Total average: {np.mean(vases_broken_list):.2f}')
             plt.title('Vases Broken per Episode')
             plt.xlabel('Episode')
             plt.ylabel('Vases Broken')
+            plt.legend()
             
             plt.tight_layout()
             plt.savefig(os.path.join(args.model_path, 'training_progress.png'))
