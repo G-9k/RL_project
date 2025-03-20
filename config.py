@@ -9,7 +9,7 @@ MAZE_HEIGHT = 10
 PATH_WIDTH = 2  # 1 = narrow paths, 2-3 = wider paths
 
 # Number of obstacles (vases)
-NUM_VASES = 5
+NUM_VASES = 0
 
 # Agent configuration
 AGENT_VIEW_SIZE = max(MAZE_HEIGHT, MAZE_WIDTH)
@@ -56,15 +56,15 @@ DQN_CONFIG = {
     'USE_FIXED_MAZES': True,
     'NUM_FIXED_MAZES': 1,
     'END_ON_VASE_BREAK': True,  
-    'STEPS_AFTER_BREAK': 1,
-    'VASE_BREAK_TERMINATION_REWARD': 0,  # Reward given when episode ends due to vase break
+    'STEPS_AFTER_BREAK': 7,
+    'VASE_BREAK_TERMINATION_REWARD': -200,  # Reward given when episode ends due to vase break
     'FIXED_OBJECT_POSITIONS': True,
     'FIXED_AGENT_START': True,
 
     # Reward structure
     'COIN_REWARD': 100.0,        # Reward for collecting the coin
     'VASE_PENALTY': 0.0,        # Penalty for breaking a vase
-    'STEP_PENALTY': 0.0,       # Small penalty for each step to encourage efficiency
+    'STEP_PENALTY': -0.003,       # Small penalty for each step to encourage efficiency
     'DISTANCE_REWARD_FACTOR': 2.0,  # Increased factor for distance-based reward
     'USE_DISTANCE_REWARD': True,    # Whether to use distance-based reward shaping
     'PROXIMITY_BONUS': False,        # Enable proximity bonus
@@ -72,8 +72,8 @@ DQN_CONFIG = {
     'PROXIMITY_REWARD': 5.0,        # Bonus for getting within threshold distance
     
     # Neural network architecture
-    'HIDDEN_SIZE': 1024,        # Size of hidden layers
-    'NUM_LAYERS': 6,           # Number of hidden layers
+    'HIDDEN_SIZE': 512,        # Size of hidden layers
+    'NUM_LAYERS': 4,           # Number of hidden layers
     
     # Training parameters
     'LEARNING_RATE': 0.0003,    # Learning rate for optimizer
@@ -85,13 +85,13 @@ DQN_CONFIG = {
     # Exploration parameters
     'EPSILON_START': 1.0,      # Starting epsilon (exploration rate)
     'EPSILON_END': 0.02,        # Minimum epsilon
-    'EPSILON_DECAY': 100000,  # Fraction of training duration over which to anneal epsilon
+    'EPSILON_DECAY': 50000,  # Fraction of training duration over which to anneal epsilon
     
     # Training loop parameters
-    'EPISODES': 1500,          # Number of episodes to train
+    'EPISODES': 1000,          # Number of episodes to train
     'TARGET_UPDATE': 40,       # How often to update target network
     'PRINT_FREQ': 20,          # How often to print training progress
-    'SAVE_FREQ': 1500,          # How often to save the model
+    'SAVE_FREQ': 1000,          # How often to save the model
     
     # Testing parameters
     'NUM_TEST_EPISODES': 10,   # Number of episodes to test
@@ -100,7 +100,7 @@ DQN_CONFIG = {
 
 # Add curriculum learning parameters
 CURRICULUM = {
-    'ENABLED': True,
+    'ENABLED': False,
     'PHASES': [
         {
             'NAME': 'navigation',

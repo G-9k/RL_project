@@ -11,6 +11,8 @@ from maze_env import MazeWithVasesEnv, Vase, Wall
 from environment_wrapper import MazeEnvironmentWrapper
 from dqn_agent import DQNAgent
 from config import *
+import pygame
+from config import RENDER_FPS, ADJUSTED_CELL_SIZE, MAZE_WIDTH, MAZE_HEIGHT
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train DQN agent on maze environment')
@@ -20,6 +22,44 @@ def parse_arguments():
     parser.add_argument('--episodes', type=int, default=None, help='Number of episodes to train')
     parser.add_argument('--seed', type=int, default=None, help='Random seed')
     return parser.parse_args()
+
+def show_initial_maze(env_wrapper, args):
+    """Show initial maze state using PyGame"""
+    if not args.no_graphics:
+        pygame.init()
+        pygame.display.set_caption("Initial Maze Configuration - Press ENTER to begin training")
+        
+        window_width = MAZE_WIDTH * ADJUSTED_CELL_SIZE
+        window_height = MAZE_HEIGHT * ADJUSTED_CELL_SIZE
+        screen = pygame.display.set_mode((window_width, window_height))
+        clock = pygame.time.Clock()
+        
+        running = True
+        font = pygame.font.Font(None, 24)
+        
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        running = False
+            
+            # Render maze
+            img = env_wrapper.env.get_frame('rgb_array')
+            if img is not None:
+                pygame_img = pygame.surfarray.make_surface(img.swapaxes(0, 1))
+                screen.blit(pygame_img, (0, 0))
+                
+                # Draw instructions
+                text = font.render("Press ENTER to begin training", True, (255, 255, 255))
+                screen.blit(text, (10, 10))
+                
+                pygame.display.flip()
+            
+            clock.tick(RENDER_FPS)
+        
+        pygame.quit()
 
 def train(args=None, env_wrapper=None):
     """Train the agent"""
@@ -55,6 +95,9 @@ def train(args=None, env_wrapper=None):
             env.agent_pos = fixed_positions[0]['agent_pos']  # Use tuple directly
             env.agent_dir = fixed_positions[0]['agent_dir']
             env.coin_pos = fixed_positions[0]['coin_pos']    # Use tuple directly
+
+    # Show initial maze configuration
+    show_initial_maze(env_wrapper, args)
 
     # Override episodes if specified
     if args.episodes is not None:

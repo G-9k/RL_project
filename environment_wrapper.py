@@ -24,7 +24,7 @@ class MazeEnvironmentWrapper:
         """Reset the environment and remove vases if needed"""
         obs, info = self.env.reset()
         
-        if DQN_CONFIG['NUM_VASES'] == 0:
+        if NUM_VASES == 0:
             # Properly iterate through grid to remove vases
             for i in range(self.env.grid.height):
                 for j in range(self.env.grid.width):
