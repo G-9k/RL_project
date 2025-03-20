@@ -209,68 +209,103 @@ class DQNAgent:
         print(f"Model loaded from {os.path.join(path, 'dqn_agent.pth')}")
 
 class PrioritizedReplayMemory:
-    def __init__(self, capacity, alpha=0.6, beta=0.4, beta_increment=0.001):
+    def __init__(self, capacity, alpha=0.6, beta=0.4, beta_increment=0.001, permanent_ratio=0.1):
         self.capacity = capacity
-        self.alpha = alpha  # How much prioritization to use (0 = no prioritization)
-        self.beta = beta    # Correction factor (1 = full correction)
-        self.beta_increment = beta_increment  # Beta annealing
-        self.eps = 1e-6     # Small positive constant to avoid zero priority
+        self.alpha = alpha
+        self.beta = beta
+        self.beta_increment = beta_increment
+        self.eps = 1e-6
         
+        # New: Keep track of permanent experiences
+        self.permanent_size = int(capacity * permanent_ratio)
+        self.permanent_memory = []
+        self.permanent_priorities = np.zeros((self.permanent_size,), dtype=np.float32)
+        
+        # Regular memory now has reduced capacity
+        self.regular_capacity = capacity - self.permanent_size
         self.memory = []
-        self.priorities = np.zeros((capacity,), dtype=np.float32)
+        self.priorities = np.zeros((self.regular_capacity,), dtype=np.float32)
         self.position = 0
         self.size = 0
-    
+
+    def promote_to_permanent(self, experience, priority):
+        """Move an experience to permanent memory"""
+        if len(self.permanent_memory) < self.permanent_size:
+            self.permanent_memory.append(experience)
+            self.permanent_priorities = np.append(self.permanent_priorities[:len(self.permanent_memory)-1], priority)
+        else:
+            # Replace lowest priority permanent experience
+            min_idx = np.argmin(self.permanent_priorities)
+            self.permanent_memory[min_idx] = experience
+            self.permanent_priorities[min_idx] = priority
+
     def push(self, *args, priority=None):
         """Save an experience with priority"""
-        if len(self.memory) < self.capacity:
-            self.memory.append(Experience(*args))
-        else:
-            self.memory[self.position] = Experience(*args)
+        experience = Experience(*args)
         
-        # New experiences get max priority
+        # Set priority
         if priority is None:
             priority = self.priorities.max() if self.size > 0 else 1.0
         
-        # Update priority
-        if self.position >= len(self.priorities):
-            self.priorities = np.append(self.priorities, priority)
+        # Check if this is a successful experience (reward > 0)
+        if args[3] > 0:  # reward is the 4th argument
+            # Consider promoting to permanent memory
+            if len(self.permanent_memory) < self.permanent_size or priority > self.permanent_priorities.min():
+                self.promote_to_permanent(experience, priority)
+                return
+        
+        # Regular memory handling
+        if len(self.memory) < self.regular_capacity:
+            self.memory.append(experience)
+            self.priorities = np.append(self.priorities[:len(self.memory)-1], priority)
         else:
+            self.memory[self.position] = experience
             self.priorities[self.position] = priority
         
-        # Update position and size
-        self.position = (self.position + 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
-    
+        self.position = (self.position + 1) % self.regular_capacity
+        self.size = min(len(self.memory), self.regular_capacity)
+
     def sample(self, batch_size):
-        """Sample a batch of experiences with importance sampling"""
-        if self.size < batch_size:
-            # Not enough samples, return what we have
-            indices = np.arange(self.size)
-        else:
-            # Calculate sampling probabilities
-            probs = self.priorities[:self.size] ** self.alpha
-            probs /= probs.sum()
-            
-            # Sample indices based on probabilities
-            indices = np.random.choice(self.size, batch_size, p=probs)
+        """Sample from both permanent and regular memories"""
+        # Determine split between permanent and regular samples
+        perm_batch_size = min(int(batch_size * 0.1), len(self.permanent_memory))
+        reg_batch_size = batch_size - perm_batch_size
         
-        # Calculate importance sampling weights
-        weights = (self.size * probs[indices]) ** (-self.beta)
+        # Sample from permanent memory
+        if perm_batch_size > 0:
+            perm_probs = self.permanent_priorities[:len(self.permanent_memory)] ** self.alpha
+            perm_probs /= perm_probs.sum()
+            perm_indices = np.random.choice(len(self.permanent_memory), perm_batch_size, p=perm_probs)
+            perm_experiences = [self.permanent_memory[idx] for idx in perm_indices]
+            perm_weights = (len(self.permanent_memory) * perm_probs[perm_indices]) ** (-self.beta)
+        else:
+            perm_indices, perm_experiences, perm_weights = [], [], []
+        
+        # Sample from regular memory
+        if reg_batch_size > 0 and self.size > 0:
+            reg_probs = self.priorities[:self.size] ** self.alpha
+            reg_probs /= reg_probs.sum()
+            reg_indices = np.random.choice(self.size, reg_batch_size, p=reg_probs)
+            reg_experiences = [self.memory[idx] for idx in reg_indices]
+            reg_weights = (self.size * reg_probs[reg_indices]) ** (-self.beta)
+        else:
+            reg_indices, reg_experiences, reg_weights = [], [], []
+        
+        # Combine samples
+        indices = np.concatenate([perm_indices, reg_indices + self.permanent_size])
+        experiences = perm_experiences + reg_experiences
+        weights = np.concatenate([perm_weights, reg_weights]) if len(perm_weights) > 0 and len(reg_weights) > 0 else np.array([])
         weights /= weights.max()  # Normalize weights
         
         # Increment beta for annealing
         self.beta = min(1.0, self.beta + self.beta_increment)
         
-        # Get experiences
-        experiences = [self.memory[idx] for idx in indices]
-        
         return experiences, indices, weights
-    
+
     def update_priorities(self, indices, priorities):
-        """Update priorities for sampled experiences"""
+        """Update priorities for both permanent and regular memories"""
         for idx, priority in zip(indices, priorities):
-            self.priorities[idx] = priority + self.eps
-    
-    def __len__(self):
-        return self.size
+            if idx < self.permanent_size:
+                self.permanent_priorities[idx] = priority + self.eps
+            else:
+                self.priorities[idx - self.permanent_size] = priority + self.eps
